@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Abhängigkeiten installieren
+        run: python -m pip install -r requirements-dev.txt
+      - name: Tests ohne Hardware
+        run: python -m unittest discover -s tests -v
+
+  cad:
+    name: CAD – STL rendern
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: OpenSCAD installieren
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends openscad fonts-liberation
+          openscad --version
+      - name: Alle Teile rendern
+        shell: bash
+        run: |
+          set -euo pipefail
+          SCAD=cad/omafon_tasten.scad
+          OUT=stl
+          mkdir -p "$OUT"
+          # Wunschschrift Atkinson Hyperlegible; fehlt sie, Fallback laut SCAD-Kommentar.
+          FONT=()
+          if ! fc-list | grep -qi "Atkinson Hyperlegible"; then
+            echo "::warning::Atkinson Hyperlegible nicht installiert – rendere mit Liberation Sans Bold"
+            FONT=(-D 'schrift="Liberation Sans:style=Bold"')
+          fi
+          render() {  # render <datei> <-D ...>
+            local name=$1; shift
+            echo "::group::$name"
+            openscad "${FONT[@]}" "$@" -o "$OUT/$name.stl" "$SCAD" 2>&1 | tee "$OUT/$name.log"
+            echo "::endgroup::"
+            if grep -E "^(ERROR|WARNING)" "$OUT/$name.log"; then
+              echo "::error::OpenSCAD meldet Fehler/Warnungen bei $name"; exit 1
+            fi
+            test -s "$OUT/$name.stl"
+            rm "$OUT/$name.log"
+          }
+          for z in 0 1 2 3 4 5 6 7 8 9; do
+            render "taste_$z" -D 'teil="ziffer"' -D "ziffer=\"$z\""
+          done
+          render taste_stern -D 'teil="ziffer"' -D 'ziffer="*"'
+          render taste_raute -D 'teil="ziffer"' -D 'ziffer="#"'
+          for teil in anrufen auflegen nachricht info notruf front; do
+            render "$teil" -D "teil=\"$teil\""
+          done
+          ls -la "$OUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: omafon-stl
+          path: stl/*.stl
+          if-no-files-found: error
