@@ -192,39 +192,80 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Ein verpasster Anruf von Maria.", self.said())
         self.assertIn("Akku 80 Prozent.", self.said())
 
-    async def test_sms_is_read_automatically(self):
+    async def test_sms_is_signalled_not_read(self):
         self.modem.inject_sms("+491609876543", "Ich komme morgen um drei vorbei.")
         await self.pump()
-        self.assertIn("Neue Nachricht. Von Maria, heute um 18 Uhr.", self.said())
+        self.assertEqual(self.audio.spoken, ["<gong>"])    # nur Signal, kein Vorlesen
+        self.assertEqual(self.phone.state, S.IDLE)
+        self.assertEqual(self.modem.store, {})            # aus dem Modem gelöscht
+        await self.press("MSG")                            # erst auf Tastendruck vorlesen
+        self.assertIn("Neue Nachricht von Maria, heute um 18 Uhr.", self.said())
         self.assertIn("Ich komme morgen um drei vorbei.", self.said())
         self.assertEqual(self.phone.state, S.READING)
-        self.assertEqual(self.modem.store, {})            # aus dem Modem gelöscht
         await self.press("CALL")                           # zurückrufen
         self.assertIn("ATD+491609876543;", self.modem.log)
+
+    async def test_signal_repeats_and_led_blinks_until_read(self):
+        self.modem.inject_sms("+491609876543", "Hallo")
+        await self.pump()
+        self.assertEqual(self.audio.spoken.count("<gong>"), 1)
+        for _ in range(4):                                 # 1 s an, 2 s aus
+            self.q.put_nowait("tick")
+            await self.pump(2)
+        self.assertIn("LED an", self.hw.log)
+        self.assertIn("LED aus", self.hw.log)
+        self.clock += dt.timedelta(minutes=5)
+        self.q.put_nowait("tick")
+        await self.pump()
+        self.assertEqual(self.audio.spoken.count("<gong>"), 1)  # noch nicht fällig
+        self.clock += dt.timedelta(minutes=5)
+        self.q.put_nowait("tick")
+        await self.pump()
+        self.assertEqual(self.audio.spoken.count("<gong>"), 2)  # Erinnerung nach 10 min
+        await self.press("MSG")
+        await self.press("HANGUP")                         # gelesen, zurück in Ruhe
+        self.hw.log.clear()
+        self.clock += dt.timedelta(minutes=30)
+        for _ in range(3):
+            self.q.put_nowait("tick")
+            await self.pump(2)
+        self.assertEqual(self.audio.spoken.count("<gong>"), 2)  # keine Erinnerung mehr
+        self.assertNotIn("LED an", self.hw.log)
+        self.assertFalse(self.hw.led)
 
     async def test_long_sms_reassembled(self):
         text = "Hallo Mama, " + "das Wetter ist schön und wir denken an dich. " * 8
         self.modem.inject_sms("+491711234567", text)
         await self.pump()
         self.assertEqual(self.phone.inbox[0]["text"], text.strip())
-        self.assertEqual(self.said().count("Von Peter"), 1)
+        self.assertEqual(self.audio.spoken.count("<gong>"), 1)   # ein Signal, nicht pro Teil
+        await self.press("MSG")
+        self.assertEqual(self.said().count("Nachricht von Peter"), 1)
 
-    async def test_sms_during_call_is_read_afterwards(self):
+    async def test_sms_during_call_is_signalled_afterwards(self):
         self.modem.inject_call("+491711234567")
         await self.pump()
         await self.press("CALL")
         self.modem.inject_sms("+491609876543", "Bis gleich")
         await self.pump()
-        self.assertNotIn("Bis gleich", self.said())
+        self.assertNotIn("<gong>", self.audio.spoken)     # kein Gong ins Gespräch
         self.modem.inject("call_end")
         await self.pump()
         self.q.put_nowait("tick")
         await self.pump()
-        self.assertIn("Bis gleich", self.said())
+        self.assertIn("<gong>", self.audio.spoken)        # danach angekündigt …
+        self.assertNotIn("Bis gleich", self.said())        # … aber nicht vorgelesen
 
-    async def test_quiet_hours_only_gong(self):
+    async def test_quiet_hours_only_led(self):
         self.clock = dt.datetime(2026, 11, 1, 23, 5)
         self.modem.inject_sms("+491609876543", "Gute Nacht")
+        for _ in range(3):
+            self.q.put_nowait("tick")
+            await self.pump(2)
+        self.assertNotIn("<gong>", self.audio.spoken)     # nachts kein Ton
+        self.assertIn("LED an", self.hw.log)
+        self.clock = dt.datetime(2026, 11, 2, 7, 0)        # Ruhezeit vorbei
+        self.q.put_nowait("tick")
         await self.pump()
         self.assertIn("<gong>", self.audio.spoken)
         self.assertNotIn("Gute Nacht", self.said())

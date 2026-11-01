@@ -35,7 +35,9 @@ contacts:
 emergency_ring_seconds: 30     # so lange klingelt es bei jedem Kontakt
 emergency_rounds: 2            # Kette zweimal durchlaufen
 emergency_callback_minutes: 30 # Rückrufe der Notfallkontakte automatisch annehmen
-quiet_hours: [22, 7]           # nachts SMS nur mit Gong ankündigen
+quiet_hours: [22, 7]           # nachts kein Gong, neue SMS nur per LED
+news_signal_minutes: 10        # neue SMS: Gong, dann alle 10 min wieder, bis gelesen (0 = nur einmal)
+news_led: true                 # LED blinkt, solange ungelesene SMS da sind
 default_route: earpiece        # earpiece = am Ohr, speaker = immer Freisprechen
 volume: 4                      # 1..5
 entry_timeout_s: 20

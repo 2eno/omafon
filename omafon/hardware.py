@@ -149,6 +149,7 @@ class SimHardware:
     def __init__(self, cfg, events: asyncio.Queue, echo: bool = True):
         self.events, self.echo = events, echo
         self.battery, self.charging = 80, False
+        self.led = False
         self.log: list[str] = []
         self.cfg = cfg
 
@@ -158,7 +159,10 @@ class SimHardware:
             print(f"  [HW] {msg}", flush=True)
 
     def vibrate(self, on): self._say(f"Vibration {'an' if on else 'aus'}")
-    def flash(self, on): pass
+    def flash(self, on):
+        if on != self.led:
+            self.led = on
+            self.log.append(f"LED {'an' if on else 'aus'}")   # nicht ausgeben: blinkt oft
     def battery_percent(self): return self.battery
     def on_charger(self): return self.charging
     async def modem_power_cycle(self): self._say("Modem neu gestartet")

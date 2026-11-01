@@ -110,7 +110,8 @@ class Phone:
         self.partial: dict[tuple, dict] = {}
         self.playlist: list[int] = []
         self.read_pos = 0
-        self.pending_news = False
+        self.next_news_signal: dt.datetime | None = None   # nächster Erinnerungs-Gong
+        self.led_on = False
         self.pending_dial: str | None = None
         self.draft_to: str | None = None
         self.draft_text = ""
@@ -198,8 +199,8 @@ class Phone:
         except ModemError as e:
             log.warning("Gespeicherte SMS nicht lesbar: %s", e)
         await self.audio.say(P["ready"])
-        if any(not m["read"] for m in self.inbox):
-            self.pending_news = True
+        if self.unread_count():
+            self.next_news_signal = self.now()          # beim nächsten Takt ankündigen
 
     async def handle(self, ev) -> None:
         if isinstance(ev, KeyEvent):
@@ -547,6 +548,7 @@ class Phone:
         finally:
             self.hw.vibrate(False)
             self.hw.flash(False)
+            self.led_on = False
 
     def stop_ringing(self) -> None:
         if self.ring_task and not self.ring_task.done():
@@ -637,12 +639,36 @@ class Phone:
         self._save("inbox.json", self.inbox)
         if not announce:
             return
-        if self.state != S.IDLE:
-            self.pending_news = True                    # nach dem Gespräch vorlesen
-        elif self.quiet_now():
-            self.bg(self.audio.tone("gong"))
-        else:
-            self.start_job(self.read_job(start=True, intro="Neue Nachricht."))
+        # Nie automatisch vorlesen: nur Signal + LED. Vorgelesen wird erst auf
+        # Tastendruck (Nachricht-Taste). Im Gespräch/Menü kommt der Gong danach.
+        self.next_news_signal = self.now()
+        await self.signal_news()
+
+    def unread_count(self) -> int:
+        return sum(not m["read"] for m in self.inbox)
+
+    async def signal_news(self) -> None:
+        """Gong für ungelesene Nachrichten, wenn fällig und das Telefon in Ruhe ist."""
+        if not self.unread_count():
+            self.next_news_signal = None
+            return
+        now = self.now()
+        if (self.next_news_signal is None or now < self.next_news_signal
+                or self.state != S.IDLE or (self.job and not self.job.done())
+                or self.quiet_now()):
+            return
+        self.bg(self.audio.tone("gong"))
+        minutes = self.cfg.news_signal_minutes
+        self.next_news_signal = now + dt.timedelta(minutes=minutes) if minutes > 0 else None
+
+    def update_news_led(self) -> None:
+        """Langsames Blinken (1 s an, 2 s aus), solange Ungelesenes da ist."""
+        if self.state == S.RINGING:                     # LED gehört gerade dem Klingeln
+            return
+        want = bool(self.cfg.news_led and self.unread_count() and self.ticks % 3 == 0)
+        if want != self.led_on:
+            self.led_on = want
+            self.hw.flash(want)
 
     async def send_status(self, number: str) -> None:
         b = self.hw.battery_percent()
@@ -790,10 +816,8 @@ class Phone:
                 del self.partial[key]
                 text = " … ".join(entry["parts"][i] for i in sorted(entry["parts"]))
                 await self.store_sms(entry["d"].sender, text, entry["d"].timestamp)
-        if self.state == S.IDLE and self.pending_news and not self.quiet_now() \
-                and not (self.job and not self.job.done()):
-            self.pending_news = False
-            self.start_job(self.read_job(start=True, intro="Du hast neue Nachrichten."))
+        await self.signal_news()
+        self.update_news_led()
         if self.ticks % 60 == 0:
             await self.check_battery()
             await self.check_modem()

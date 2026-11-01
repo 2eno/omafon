@@ -31,6 +31,8 @@ class Config:
     emergency_rounds: int = 2
     emergency_callback_minutes: int = 30
     quiet_hours: tuple[int, int] = (22, 7)
+    news_signal_minutes: int = 10            # Gong-Erinnerung bei ungelesenen SMS (0 = nur einmal)
+    news_led: bool = True                    # LED blinkt bei ungelesenen SMS
     default_route: str = "earpiece"          # "earpiece" oder "speaker"
     volume: int = 4                          # 1..5
     entry_timeout_s: int = 20
