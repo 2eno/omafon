@@ -7,7 +7,9 @@
 Sprechendes Telefon für Menschen mit starker Sehbehinderung.
 Raspberry Pi Zero 2 W + Waveshare SIM7600E-H 4G HAT, Python 3 (asyncio).
 
-![Tastenfeld: weiße Ziffernkappen mit erhabenen Ziffern auf dunkler Front, gelbe Anruftaste, schwarze Auflegetaste, breite Info-Taste](cad/tastenfeld_vorschau.png)
+![Tastenfeld: weiße Ziffernkappen mit schwarzen erhabenen Ziffern auf dunkler Front, gelbe Anruftaste, schwarze Auflegetaste mit weißem Balken, breite Info-Taste](cad/tastenfeld_vorschau.png)
+
+*Vorschau mit Ersatzschrift Liberation Sans; vorgesehen ist Atkinson Hyperlegible.*
 
 ## Status
 
@@ -18,7 +20,23 @@ Raspberry Pi Zero 2 W + Waveshare SIM7600E-H 4G HAT, Python 3 (asyncio).
 - Modem, Tastenmatrix, Verstärker, Akku-Messung und Gehäuseteile sind noch
   nicht an echter Hardware erprobt.
 - Die STL-Dateien der Tastenkappen und der Front werden bei jedem Push von der
-  CI erzeugt (Artefakt `omafon-stl`).
+  CI erzeugt (Artefakt `omafon-stl`): `einfarbig/` und `zweifarbig/`
+  (je Taste `*_kappe.stl` + `*_zeichen.stl` für Mehrmaterial-Druck).
+
+## Neue Nachrichten
+
+SMS werden **nicht automatisch vorgelesen**. Eine neue Nachricht wird mit einem
+Gong angekündigt, der sich alle `news_signal_minutes` (Standard 10) wiederholt,
+solange etwas ungelesen ist; zusätzlich blinkt die LED langsam (`news_led`).
+Während eines Gesprächs oder in der Ruhezeit (`quiet_hours`) gibt es keinen
+Gong, nachts nur die LED. Vorgelesen wird erst mit der Nachricht-Taste.
+
+## Tasten
+
+Die Kappen sind zweifarbig ausgelegt: Zeichen immer kontrastreich zur Kappe
+(Schwarz auf Weiß, Schwarz auf Gelb, Weiß auf Schwarz/Rot). Farben stehen in
+`FARBEN` in `cad/omafon_tasten.scad`, Export getrennt mit `-D 'farbteil="kappe"'`
+bzw. `-D 'farbteil="zeichen"'`.
 
 ```
 omafon/
@@ -33,7 +51,7 @@ omafon/
 tools/prerender.py   feste Ansagen vorab erzeugen
 cad/omafon_tasten.scad  Tastenkappen und Tastenfront (OpenSCAD)
 systemd/omafon.service
-tests/test_omafon.py    22 Tests, laufen ohne Hardware
+tests/test_omafon.py    23 Tests, laufen ohne Hardware
 docs/                   Stückliste und Verkabelung
 ```
 

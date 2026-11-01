@@ -41,6 +41,7 @@ python3 -m unittest discover -s tests -v                  # Tests
 python3 -m omafon.main --config config.example.yaml --sim # Simulator (Daten in ./sim-data)
 python3 -m tools.prerender /etc/omafon/config.yaml        # Ansagen vorab rendern (Pi)
 openscad -D 'teil="ziffer"' -D 'ziffer="5"' -o taste_5.stl cad/omafon_tasten.scad
+openscad -D 'teil="ziffer"' -D 'ziffer="5"' -D 'farbteil="zeichen"' -o taste_5_zeichen.stl cad/omafon_tasten.scad
 ```
 
 Im Simulator: Tasten `0-9 * #`, `a` Anrufen, `h` Auflegen, `m` Nachricht, `i` Info,
@@ -60,5 +61,10 @@ Im Simulator: Tasten `0-9 * #`, `a` Anrufen, `h` Auflegen, `m` Nachricht, `i` In
    Ansage kommt verzögert.
 4. Tests müssen ohne Hardware laufen: Hardware-Bibliotheken (`serial`, `smbus2`,
    `gpiozero`, `vosk`) nur lokal in Funktionen importieren.
-5. Keine echten Telefonnummern, Standorte oder Zugangsdaten committen.
+5. **Nachrichten nie automatisch vorlesen.** Neue SMS nur per Gong (wiederholt alle
+   `news_signal_minutes`) und blinkender LED ankündigen; vorgelesen wird erst auf
+   Tastendruck. Kein Gong im Gespräch, in Menüs oder in der Ruhezeit.
+6. **Tasten gut lesbar halten:** Zeichen immer in Kontrastfarbe zur Kappe
+   (`FARBEN` in der SCAD-Datei), Kappe und Zeichen als getrennte Körper (`farbteil`).
+7. Keine echten Telefonnummern, Standorte oder Zugangsdaten committen.
    `config.yaml` ist in `.gitignore`; Beispiele gehören in `config.example.yaml`.
