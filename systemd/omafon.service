@@ -1,0 +1,23 @@
+[Unit]
+Description=Omafon – sprechendes Telefon
+After=sound.target dev-ttyAMA0.device
+Wants=dev-ttyAMA0.device
+
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStart=/usr/bin/python3 -m omafon.main --config /etc/omafon/config.yaml
+WorkingDirectory=/opt/omafon
+User=omafon
+Group=omafon
+SupplementaryGroups=audio dialout gpio i2c
+# Hauptschleife hängt -> systemd startet neu
+WatchdogSec=30
+Restart=always
+RestartSec=2
+# Höhere Priorität: Ziffernansage soll nie stocken
+Nice=-5
+CacheDirectory=omafon
+
+[Install]
+WantedBy=multi-user.target
