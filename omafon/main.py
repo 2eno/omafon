@@ -13,6 +13,7 @@ import threading
 
 from . import config as config_mod
 from .phone import Phone
+from .telephony import create_backend
 
 log = logging.getLogger("omafon")
 
@@ -50,6 +51,8 @@ Tasten:  0-9 * #   a=Anrufen  h=Auflegen  m=Nachricht  i=Info  + - =Lautstärke
          auf / zu = Notruf-Klappe   sos = Notrufknopf 3 s halten   sos- = zu früh los
          lade / ab = Ladeschale
 Netz:    !ring <nr>   !sms <nr> <text>   !annahme   !ende   !besetzt
+         Festnetz (backend: sip): !sms legt eine Anrufbeantworter-Nachricht ab,
+         !wlan aus / !wlan an trennt bzw. verbindet die Fritz!Box
 Sprache: !sag <text>  (nächstes Ergebnis der Spracherkennung)
 """
 
@@ -57,6 +60,7 @@ KEYMAP = {"a": "CALL", "h": "HANGUP", "m": "MSG", "i": "INFO", "+": "VOL_UP", "-
 
 
 def sim_console(loop, events, hw, modem, stt) -> None:
+    """modem = Simulator-Steuerung mit inject_call, inject_sms, inject (und ggf. link)."""
     from .hardware import KeyEvent
     print(SIM_HELP, flush=True)
 
@@ -82,6 +86,8 @@ def sim_console(loop, events, hw, modem, stt) -> None:
                 loop.call_soon_threadsafe(modem.inject, "busy")
             elif cmd == "sag":
                 loop.call_soon_threadsafe(stt.answers.put_nowait, rest)
+            elif cmd == "wlan" and hasattr(modem, "link"):
+                loop.call_soon_threadsafe(modem.link, rest.strip() != "aus")
             continue
         if line in ("auf", "zu"):
             put(KeyEvent("SOS_COVER", "down" if line == "auf" else "up"))
@@ -109,17 +115,16 @@ async def amain(args) -> None:
     if args.sim:
         from .audio import SimAudio
         from .hardware import SimHardware
-        from .modem import SimModem
         from .stt import SimRecognizer
         cfg.data_dir = args.data or "./sim-data"
         audio, hw = SimAudio(cfg), SimHardware(cfg, events)
-        modem, stt = SimModem(events), SimRecognizer()
+        modem, control = create_backend(cfg, events, loop, sim=True)
+        stt = SimRecognizer()
         await modem.start()
-        threading.Thread(target=sim_console, args=(loop, events, hw, modem, stt), daemon=True).start()
+        threading.Thread(target=sim_console, args=(loop, events, hw, control, stt), daemon=True).start()
     else:
         from .audio import TPA2016, Audio
         from .hardware import Hardware
-        from .modem import Modem
         from .stt import Recognizer
         try:
             amp = TPA2016()
@@ -128,7 +133,7 @@ async def amain(args) -> None:
             amp = None
         audio = Audio(cfg, amp)
         hw = Hardware(cfg, events, loop)
-        modem = Modem(cfg.serial_port, cfg.serial_baud, events, loop)
+        modem, _ = create_backend(cfg, events, loop)
         await modem.start()
         stt = Recognizer(cfg)
     phone = Phone(cfg, audio, modem, stt, hw, events)

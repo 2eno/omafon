@@ -10,21 +10,12 @@ import asyncio
 import logging
 import threading
 import time
-from dataclasses import dataclass
-
 from . import pdu
+from .telephony import ModemError, ModemEvent, TelephonyBackend
+
+__all__ = ["Modem", "SimModem", "ModemEvent", "ModemError"]
 
 log = logging.getLogger("omafon.modem")
-
-
-@dataclass
-class ModemEvent:
-    kind: str          # ring, clip, sms, call_begin, call_end, no_carrier, busy, no_answer, missed
-    data: str = ""
-
-
-class ModemError(Exception):
-    pass
 
 
 URC_PREFIXES = {
@@ -36,7 +27,11 @@ URC_PREFIXES = {
 IGNORED_URCS = ("+CPIN:", "SMS DONE", "PB DONE", "RDY", "+CGEV:", "+CREG:", "+CEREG:")
 
 
-class Modem:
+class Modem(TelephonyBackend):
+    """Backend "sim7600": Mobilfunk mit SMS und GPS."""
+    name = "sim7600"
+    supports_sms = True
+
     def __init__(self, port: str, baud: int, events: asyncio.Queue, loop: asyncio.AbstractEventLoop):
         self.port, self.baud = port, baud
         self.events, self.loop = events, loop
@@ -243,8 +238,10 @@ class Modem:
         return None
 
 
-class SimModem:
+class SimModem(TelephonyBackend):
     """Ersatz-Modem für PC und Tests. Ereignisse kommen aus inject_*()."""
+    name = "sim7600"
+    supports_sms = True
 
     def __init__(self, events: asyncio.Queue, echo: bool = True):
         self.events, self.echo = events, echo
