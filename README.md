@@ -1,7 +1,24 @@
 # Omafon – Software
 
+[![CI](https://github.com/2eno/omafon/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/2eno/omafon/actions/workflows/ci.yml)
+![Python 3.11 | 3.13](https://img.shields.io/badge/python-3.11%20%7C%203.13-blue)
+[![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-green)](LICENSE)
+
 Sprechendes Telefon für Menschen mit starker Sehbehinderung.
 Raspberry Pi Zero 2 W + Waveshare SIM7600E-H 4G HAT, Python 3 (asyncio).
+
+![Tastenfeld: weiße Ziffernkappen mit erhabenen Ziffern auf dunkler Front, gelbe Anruftaste, schwarze Auflegetaste, breite Info-Taste](cad/tastenfeld_vorschau.png)
+
+## Status
+
+**Software im Simulator getestet, Hardware ungetestet.**
+
+- Alle Tests laufen ohne Hardware (siehe CI); der PC-Simulator (`--sim`) deckt
+  Wählen, Anrufe, SMS, Sprachwahl, Diktat und Notruf ab.
+- Modem, Tastenmatrix, Verstärker, Akku-Messung und Gehäuseteile sind noch
+  nicht an echter Hardware erprobt.
+- Die STL-Dateien der Tastenkappen und der Front werden bei jedem Push von der
+  CI erzeugt (Artefakt `omafon-stl`).
 
 ```
 omafon/
@@ -17,12 +34,13 @@ tools/prerender.py   feste Ansagen vorab erzeugen
 cad/omafon_tasten.scad  Tastenkappen und Tastenfront (OpenSCAD)
 systemd/omafon.service
 tests/test_omafon.py    22 Tests, laufen ohne Hardware
+docs/                   Stückliste und Verkabelung
 ```
 
 ## Am PC ausprobieren (ohne Hardware)
 
 ```bash
-pip install pyyaml
+pip install -r requirements-dev.txt     # nur PyYAML
 python3 -m unittest discover -s tests -v
 python3 -m omafon.main --config config.example.yaml --sim
 ```
@@ -90,3 +108,7 @@ auf dem Pi mit einem kurzen Python-Aufruf von `Recognizer.listen_name()`.
 - Bestätigung "Taste 1 drücken" beim Notruf-Empfänger (DTMF-Erkennung prüfen).
 - Echte Lastmessung für die Akkulaufzeit.
 - TPA2016-Registerwerte am echten Chip prüfen (Kommentar in `audio.py`).
+
+## Lizenz
+
+MIT – siehe [LICENSE](LICENSE).
