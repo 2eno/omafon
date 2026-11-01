@@ -3,15 +3,22 @@
 // Kommandozeile, z. B.:
 //   openscad -D 'teil="ziffer"' -D 'ziffer="5"' -o taste_5.stl omafon_tasten.scad
 //   openscad -D 'teil="front"' -o front.stl omafon_tasten.scad
+//   Zweifarbig: dieselbe Kappe zweimal exportieren, mit -D 'farbteil="kappe"' und
+//   -D 'farbteil="zeichen"', im Slicer als zwei Körper eines Objekts laden.
 //
-// Druck: Kappen mit der Oberseite nach oben, 0,12–0,16 mm Schicht, PETG oder PLA,
-// Mehrfarbe (Farbwechsel bei Schichthöhe der Reliefunterkante) für Kontrast.
+// Druck: Kappen mit der Oberseite nach oben, 0,12–0,16 mm Schicht, PETG oder PLA.
+// Lesbarkeit: Zeichen immer kontrastreich zur Kappe (Vorschlag unten in FARBEN):
+//   - Mehrmaterial-Drucker: farbteil="kappe" + farbteil="zeichen" (zwei STL)
+//   - Ein-Düsen-Drucker:   Farbwechsel (M600) an der Kappenoberkante (kappe_h) klappt
+//     sauber nur bei flachen Kappen (nachricht, info). Ziffern sitzen in einer Mulde –
+//     dort besser Mehrmaterial oder das erhabene Zeichen nachträglich einfärben.
 // Erst EINE Kappe drucken und den Sitz auf dem Taster prüfen (stem_spiel).
 
 /* [Auswahl] */
 teil = "uebersicht"; // [uebersicht, ziffer, anrufen, auflegen, nachricht, info, notruf, front]
 ziffer = "5";        // 0-9, * oder #
 braille = false;     // Braille-Zelle oben an der Kappe
+farbteil = "alles";  // [alles, kappe, zeichen] – für zweifarbigen Druck getrennt exportieren
 
 /* [Maße] */
 raster = 24;         // Tastenabstand Mitte-Mitte
@@ -38,6 +45,27 @@ steg_b = 2.0;
 rand = 6;
 
 $fn = 48;
+
+// Kontrastreiche Farbpaare [Kappe, Zeichen] – nur für Vorschau/3MF, STL hat keine Farbe.
+// Weiß/Schwarz ist für Sehreste am besten lesbar; Gelb/Schwarz für die Anruftaste.
+FARBEN = [
+    ["ziffer",    ["white",   "black"]],
+    ["anrufen",   ["#FFD100", "black"]],
+    ["auflegen",  ["#222222", "white"]],
+    ["nachricht", ["white",   "black"]],
+    ["info",      ["white",   "black"]],
+    ["notruf",    ["#D00000", "white"]],
+];
+function farben(art) = [for (e = FARBEN) if (e[0] == art) e[1]][0];
+
+// Kappe und Zeichen als getrennte Körper: children(0) = Kappe, children(1) = Zeichen.
+// "kappe" spart das Zeichen aus, damit sich beide Körper im Slicer nicht überlappen.
+module zweifarbig(art) {
+    f = farben(art);
+    if (farbteil == "alles") { color(f[0]) children(0); color(f[1]) children(1); }
+    else if (farbteil == "kappe") color(f[0]) difference() { children(0); children(1); }
+    else if (farbteil == "zeichen") color(f[1]) children(1);
+}
 
 // ------------------------------------------------------------ Grundformen
 module rrect(w, d, r) {
@@ -111,14 +139,16 @@ module braille_ziffer(z, y0 = 8.2) {
 
 // ------------------------------------------------------------ Kappen
 module kappe_ziffer(z) {
-    koerper(kappe, kappe, "mulde");
-    translate([0, 0, kappe_h - 0.9]) {
-        gr = braille ? 9.5 : schrift_gr;
-        relief_text(z, gr, braille ? -2.8 : (z == "5" ? 1.5 : 0));
-        if (z == "5")  // Tastpunkt wie auf jeder Telefontastatur
-            translate([0, braille ? -8 : -6.2, 0]) scale([1, 1, 0.7]) sphere(d = 2.2);
+    zweifarbig("ziffer") {
+        union() {
+            koerper(kappe, kappe, "mulde");
+            if (z == "5")  // Tastpunkt wie auf jeder Telefontastatur (in Kappenfarbe)
+                translate([0, braille ? -8 : -6.2, kappe_h - 0.9]) scale([1, 1, 0.7]) sphere(d = 2.2);
+            if (braille) braille_ziffer(z);
+        }
+        translate([0, 0, kappe_h - 0.9])
+            relief_text(z, braille ? 9.5 : schrift_gr, braille ? -2.8 : (z == "5" ? 1.5 : 0));
     }
-    if (braille) braille_ziffer(z);
 }
 
 module hoerer2d() {   // Telefonhörer: Bügel oben, Hör- und Sprechmuschel unten
@@ -135,17 +165,22 @@ module hoerer2d() {   // Telefonhörer: Bügel oben, Hör- und Sprechmuschel unt
 }
 
 module kappe_anrufen() {
-    koerper(kappe, kappe, "kuppel");
-    translate([0, 1.5, kappe_h + 1.4]) linear_extrude(relief_h + 0.6) scale(0.95) hoerer2d();
+    zweifarbig("anrufen") {
+        koerper(kappe, kappe, "kuppel");
+        translate([0, 1.5, kappe_h + 1.4]) linear_extrude(relief_h + 0.6) scale(0.95) hoerer2d();
+    }
 }
 
 module kappe_auflegen() {
-    koerper(kappe, kappe, "rinne");
-    // erhabener Querbalken in der Rinne – fühlbar anders als Anrufen
-    translate([0, 0, kappe_h - 1.6]) linear_extrude(relief_h + 0.9) rrect(14, 3.2, 1.4);
+    zweifarbig("auflegen") {
+        koerper(kappe, kappe, "rinne");
+        // erhabener Querbalken in der Rinne – fühlbar anders als Anrufen
+        translate([0, 0, kappe_h - 1.6]) linear_extrude(relief_h + 0.9) rrect(14, 3.2, 1.4);
+    }
 }
 
 module kappe_nachricht() {   // gleiche Größe, aber flach – fühlbar anders als Kuppel und Rinne
+    zweifarbig("nachricht") {
     koerper(kappe, kappe, "flach");
     translate([0, 0, kappe_h - 0.02]) linear_extrude(relief_h) difference() {
         union() {
@@ -156,29 +191,38 @@ module kappe_nachricht() {   // gleiche Größe, aber flach – fühlbar anders 
             }
         }
     }
+    }
 }
 
 module kappe_info() {
     b = 34; d = 17;
-    difference() {
-        hull() { for (s = [-1, 1]) translate([s * (b - d) / 2, 0, 0]) cylinder(d1 = d + 1.5, d2 = d, h = kappe_h); }
-        translate([0, 0, -0.01]) hull() { for (s = [-1, 1]) translate([s * (b - d) / 2, 0, 0]) cylinder(d = d - 2 * wand, h = kappe_h - 3); }
+    zweifarbig("info") {
+        union() {
+            difference() {
+                hull() { for (s = [-1, 1]) translate([s * (b - d) / 2, 0, 0]) cylinder(d1 = d + 1.5, d2 = d, h = kappe_h); }
+                translate([0, 0, -0.01]) hull() { for (s = [-1, 1]) translate([s * (b - d) / 2, 0, 0]) cylinder(d = d - 2 * wand, h = kappe_h - 3); }
+            }
+            translate([0, 0, kappe_h - 3 - stem_tiefe]) stem();
+        }
+        for (y = [-4, 0, 4]) translate([0, y, kappe_h - 0.02]) linear_extrude(relief_h) rrect(22, 1.4, 0.6);
     }
-    for (y = [-4, 0, 4]) translate([0, y, kappe_h - 0.02]) linear_extrude(relief_h) rrect(22, 1.4, 0.6);
-    translate([0, 0, kappe_h - 3 - stem_tiefe]) stem();
     // 34 mm auf einem Taster geht noch. Kippelt sie zu sehr: 2u-Stabilisator
     // (Cherry, Plattenmontage) einbauen und Ausschnitte in der Front ergänzen.
 }
 
 module kappe_notruf() {   // runder Knopf mit Noppen, sitzt versenkt unter der Klappe
     d = 18;
-    difference() {
-        cylinder(d1 = d + 1.2, d2 = d, h = kappe_h);
-        translate([0, 0, -0.01]) cylinder(d = d - 2 * wand, h = kappe_h - 3);
+    zweifarbig("notruf") {
+        union() {
+            difference() {
+                cylinder(d1 = d + 1.2, d2 = d, h = kappe_h);
+                translate([0, 0, -0.01]) cylinder(d = d - 2 * wand, h = kappe_h - 3);
+            }
+            translate([0, 0, kappe_h - 3 - stem_tiefe]) stem();
+        }
+        for (a = [0:60:359], r = [0, 5.2]) if (r > 0 || a == 0)   // Noppen in Kontrastfarbe
+            translate([r * cos(a), r * sin(a), kappe_h]) sphere(d = 2.4, $fn = 16);
     }
-    for (a = [0:60:359], r = [0, 5.2]) if (r > 0 || a == 0)
-        translate([r * cos(a), r * sin(a), kappe_h]) sphere(d = 2.4, $fn = 16);
-    translate([0, 0, kappe_h - 3 - stem_tiefe]) stem();
 }
 
 // ------------------------------------------------------------ Tastenfront
@@ -212,12 +256,12 @@ module front() {
 }
 
 // ------------------------------------------------------------ Auswahl
-module kappe_fuer(art) {
-    if (art == "a") color("gold") kappe_anrufen();
-    else if (art == "x") color("#222") kappe_auflegen();
-    else if (art == "n") color("white") kappe_nachricht();
-    else if (art == "i") color("white") kappe_info();
-    else color("white") kappe_ziffer(art);
+module kappe_fuer(art) {   // Farben kommen aus FARBEN (zweifarbig)
+    if (art == "a") kappe_anrufen();
+    else if (art == "x") kappe_auflegen();
+    else if (art == "n") kappe_nachricht();
+    else if (art == "i") kappe_info();
+    else kappe_ziffer(art);
 }
 
 if (teil == "ziffer") kappe_ziffer(ziffer);
