@@ -50,7 +50,8 @@ jobs:
             echo "::warning::Atkinson Hyperlegible nicht installiert – rendere mit Liberation Sans Bold"
             FONT=(-D 'schrift="Liberation Sans:style=Bold"')
           fi
-          render() {  # render <datei> <-D ...>
+          mkdir -p "$OUT/einfarbig" "$OUT/zweifarbig"
+          render() {  # render <ziel ohne .stl> <-D ...>
             local name=$1; shift
             echo "::group::$name"
             openscad "${FONT[@]}" "$@" -o "$OUT/$name.stl" "$SCAD" 2>&1 | tee "$OUT/$name.log"
@@ -61,17 +62,24 @@ jobs:
             test -s "$OUT/$name.stl"
             rm "$OUT/$name.log"
           }
+          kappe() {  # kappe <name> <-D ...>: einfarbig + Kappe/Zeichen für Mehrfarbdruck
+            local name=$1; shift
+            render "einfarbig/$name" "$@"
+            render "zweifarbig/${name}_kappe" "$@" -D 'farbteil="kappe"'
+            render "zweifarbig/${name}_zeichen" "$@" -D 'farbteil="zeichen"'
+          }
           for z in 0 1 2 3 4 5 6 7 8 9; do
-            render "taste_$z" -D 'teil="ziffer"' -D "ziffer=\"$z\""
+            kappe "taste_$z" -D 'teil="ziffer"' -D "ziffer=\"$z\""
           done
-          render taste_stern -D 'teil="ziffer"' -D 'ziffer="*"'
-          render taste_raute -D 'teil="ziffer"' -D 'ziffer="#"'
-          for teil in anrufen auflegen nachricht info notruf front; do
-            render "$teil" -D "teil=\"$teil\""
+          kappe taste_stern -D 'teil="ziffer"' -D 'ziffer="*"'
+          kappe taste_raute -D 'teil="ziffer"' -D 'ziffer="#"'
+          for teil in anrufen auflegen nachricht info notruf; do
+            kappe "$teil" -D "teil=\"$teil\""
           done
-          ls -la "$OUT"
+          render einfarbig/front -D 'teil="front"'
+          ls -laR "$OUT"
       - uses: actions/upload-artifact@v4
         with:
           name: omafon-stl
-          path: stl/*.stl
+          path: stl/**/*.stl
           if-no-files-found: error
