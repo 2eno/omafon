@@ -70,7 +70,7 @@ omafon/
   numbers.py    "zwo" statt "zwei", Nummern in Gruppen, Uhrzeit
 tools/prerender.py   feste Ansagen vorab erzeugen
 cad/omafon_masse.scad      gemeinsame Maße Handteil/Ladeschale, Variante
-cad/omafon_gehaeuse.scad   Handteil: Deckel, Wanne, Tastenplatte, Akkudeckel, Notrufklappe …
+cad/omafon_gehaeuse.scad   Handteil: Prüfstück, Deckel mit Schalterplatte, Wanne, Hörerkopf, Akkudeckel, Notrufklappe …
 cad/omafon_tasten.scad     Tastenkappen und Tastenfront (OpenSCAD)
 cad/omafon_ladeschale.scad Ladeschale mit Lautsprecher
 systemd/omafon.service

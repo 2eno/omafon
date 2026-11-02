@@ -9,6 +9,7 @@ tasten/einfarbig/            17 Tastenkappen (Farbwechsel oder einfarbig)
 tasten/zweifarbig/           dieselben Kappen als *_kappe.stl + *_zeichen.stl (Mehrmaterial)
 gehaeuse/festnetz/           Handteil 94 x 210 x 30 mm
 gehaeuse/mobil_hybrid/       Handteil 94 x 210 x 36 mm (Platz für den SIM7600-HAT)
+                             (Hörerkopf + Muschel stehen 21 mm über der Vorderseite)
 ladeschale/festnetz/         Ladeschale passend zum 30-mm-Handteil
 ladeschale/mobil_hybrid/     Ladeschale passend zum 36-mm-Handteil
 ```
@@ -16,10 +17,13 @@ ladeschale/mobil_hybrid/     Ladeschale passend zum 36-mm-Handteil
 ![Handteil von vorn](../cad/gehaeuse_vorschau_vorn.png)
 ![Handteil von hinten: Notrufklappe, Akkudeckel, Lautsprecher, Kodiernut, Ladekontakte](../cad/gehaeuse_vorschau_hinten.png)
 
-> **Stand:** Die Geometrie ist am Rechner geprüft (Kollisionen, Schnitte,
-> Druckrichtung, fehlerfreies Rendern). **Gedruckt und anprobiert ist noch nichts.**
-> Erst eine Taste, die Tastenplatte und den Deckel drucken und anprobieren, dann
-> den Rest.
+> **Stand:** Die Geometrie ist am Rechner geprüft: Kollisionen im Zusammenbau
+> (auch mit gedrückten Tasten und der Elektronik als Platzhalter), Überhänge,
+> Druckrichtung und fehlerfreies Rendern. **Gedruckt und anprobiert ist noch nichts.**
+>
+> **Reihenfolge:** 1. `pruefstueck.stl` (ca. 20 min) → Taster müssen fest
+> einrasten, Einsatz einschmelzen, Lautstärketaste probestecken. 2. Eine Tastenkappe
+> auf einen Taster. 3. Erst dann Deckel und Wanne.
 
 ## Teileliste
 
@@ -27,13 +31,14 @@ ladeschale/mobil_hybrid/     Ladeschale passend zum 36-mm-Handteil
 
 | Datei | Stück | Farbe (Vorschlag) | Druck | Hinweise |
 |---|---|---|---|---|
-| `deckel.stl` | 1 | hellgrau/weiß | Vorderseite unten, ohne Stützen | Fenster, Hörer mit Ringmulde, LED, Mikrofon, 6 Rasthaken |
-| `hoererkopf.stl` | 1 | wie Deckel | Oberseite unten, ohne Stützen | erhöhtes Kopfteil über den Tasten (15 mm): Ohr und Muschel liegen **höher als die Tastenkappen**, die Wange drückt beim Telefonieren keine Taste. Enthält Schallrohr und LED-Lichtrohr; wird auf den Deckel geklebt |
+| `pruefstueck.stl` | 1 | beliebig | flach | **zuerst drucken:** 2 Taster-Ausschnitte wie im Deckel, Dom für einen Einsatz, Loch der Lautstärketaste |
+| `deckel.stl` | 1 | **dunkelgrau/schwarz** (Kontrast zu den weißen Kappen) | Vorderseite unten, ohne Stützen, **0,2 mm Schicht** | mit eingebauter Schalterplatte: 16 Taster klipsen von vorn ein (Platte 1,6 mm = 8 Lagen à 0,2 mm). Hörer mit Ringmulde, LED-Loch, Mikrofon |
+| `hoererkopf.stl` | 1 | hell (sichtbare LED) | Oberseite unten, ohne Stützen | erhöhtes Kopfteil über den Tasten (18 mm): Ohr und Muschel liegen **gut 3 mm höher als die höchste Tastenkappe**, die Wange drückt beim Telefonieren keine Taste. Enthält Schallrohr und LED-Lichtrohr; wird auf den Deckel geklebt |
 | `hoermuschel.stl` | 1 | **dunkel, TPU 95A** (sonst PETG) | flache Seite unten | weicher Ring (3 mm) oben auf dem Hörerkopf: führt das Ohr an die richtige Stelle und dichtet ab |
-| `wanne.stl` | 1 | hellgrau/weiß | Rückseite unten, ohne Stützen | Notrufmulde (Brücke über 21 mm), Akkufach, Ladekontakte |
-| `tastenplatte.stl` | 1 | **schwarz** | Platte unten | dunkle Platte = Kontrast zu den weißen Kappen; **1,5 mm** an den Ausschnitten nicht verändern (Cherry-MX-Klemmmaß) |
-| `akkudeckel.stl` | 1 | wie Wanne | Außenseite unten | 2 Senkschrauben |
-| `notrufklappe.stl` | 1 | **rot** | stehend auf der Scharnierkante, Brim | Noppen außen = „hier ist der Notruf“ |
+| `wanne.stl` | 1 | hellgrau/weiß | Rückseite unten, ohne Stützen, **0,2 mm Schicht** | Notrufmulde mit Schalterplatte 1,6 mm, Akkufach, Ladekontakte, Kodiernut |
+| `tastengitter.stl` | 1 | wie Deckel | flach | **optional:** 1,2 mm hohe Taststege zwischen den Tasten, auf den Deckel kleben. Niedrig genug, dass gedrückte Kappen nicht anstoßen |
+| `akkudeckel.stl` | 1 | wie Wanne | Außenseite unten | 2 Senkschrauben in 2,2 mm dicken Polstern |
+| `notrufklappe.stl` | 1 | **rot** | stehend auf der Scharnierkante, **Brim** | Noppen außen = „hier ist der Notruf“; leichte Raste seitlich, Scharnier oben – fällt in der Schale und in der Hand von selbst zu |
 | `lautstaerke_plus.stl` | 1 | dunkel | Kragen unten | erhabenes Kreuz |
 | `lautstaerke_minus.stl` | 1 | dunkel | Kragen unten | erhabener Balken |
 
@@ -60,7 +65,11 @@ Mobil- und Hybridgerät haben dieselben Maße; `mobil_hybrid` passt für beide.
   Tastenkappen gehen auch in PLA.
 - **Bettgröße:** Handteil ist 210 mm lang. Das passt auf Drucker ab 220 × 220 mm
   bzw. auf 250 × 210 mm längs.
-- Schicht 0,2 mm (Gehäuse, Schale), 0,12–0,16 mm (Kappen, Tastenplatte).
+- Schicht **0,2 mm** für Deckel und Wanne (auch die erste Lage): die Schalterplatten
+  sind auf 1,6 mm = 8 Lagen ausgelegt. Andere Schichthöhen ergeben 1,4/1,8 mm, dann
+  halten die Taster nicht sicher. Ladeschale 0,2 mm, Kappen 0,12–0,16 mm.
+- Löcher nicht per Slicer-Lochkompensation aufweiten, die Maße enthalten schon Spiel
+  (Taster-Ausschnitt 14,1 mm, Teile 0,3 mm je Seite).
 - 3–4 Wände, 20–25 % Füllung (Gyroid), Ladeschale 30 %.
 - Keine Stützen außer der Brim an der Notrufklappe.
 
@@ -68,8 +77,8 @@ Mobil- und Hybridgerät haben dieselben Maße; `mobil_hybrid` passt für beide.
 
 | Teil | Stück | Wo |
 |---|---|---|
-| Gewindeeinsatz M2,5 × 3,5 (Einschmelzmutter, Ø 3,6 mm Loch) | 6 | 4 im Deckel, 2 in den Akkudeckel-Domen |
-| Zylinderschraube M2,5 × **25** (Festnetz) bzw. × **30** (Mobil/Hybrid) | 4 | Gehäuse, von hinten |
+| Gewindeeinsatz M2,5 × 3,5 (Einschmelzmutter, Ø 3,6 mm Loch) | 6 (+1 Prüfstück) | 4 im Deckel, 2 in den Akkudeckel-Domen |
+| Zylinderschraube M2,5 × **25** (Festnetz) bzw. × **30** (Mobil/Hybrid) | 4 | Gehäuse, von hinten (Senkung so tief, dass 3 mm im Einsatz greifen) |
 | Senkschraube M2,5 × 6 | 2 | Akkudeckel |
 | Schraube M2,5 × 6 (selbstformend) oder Abstandsbolzen | 4 | Pi Zero 2 W |
 | Filament 1,75 mm, 32 mm lang | 1 | Scharnierstift Notrufklappe |
@@ -88,9 +97,9 @@ Elektronik siehe [festnetz-hardware.md](festnetz-hardware.md) bzw.
 
 1. **Einsätze** mit dem Lötkolben (ca. 220 °C) einschmelzen: 4 in die Dome des
    Deckels, 2 von außen in die Akkudeckel-Dome der Wanne.
-2. **Tastenplatte:** 16 Taster von vorn einklipsen. Die Platte von innen ins
-   Deckelfenster schieben, bis die 6 Rasthaken einrasten. Die Taststege schauen
-   0,8 mm aus dem Fenster. Kappen erst ganz am Schluss aufstecken.
+2. **Taster:** 16 Taster von vorn in den Deckel klipsen (sie rasten in der 1,6-mm-
+   Platte ein). Optional das Tastengitter vorn aufkleben. Kappen erst ganz am
+   Schluss aufstecken.
 3. Hörkapsel, Mikrofon (mit Dichtring/Filz) und LED in die Halter im Deckel kleben.
    LED von unten ins Lichtrohr des Hörerkopfs stecken (Kopf schaut oben heraus,
    Beine verlängern), Drähte durch das LED-Loch im Deckel. Hörerkopf mit 2K-Kleber
@@ -98,8 +107,9 @@ Elektronik siehe [festnetz-hardware.md](festnetz-hardware.md) bzw.
    Ringmulde über dem Hörer. Hörmuschel oben in die Mulde des Kopfs kleben.
    Mobil/Hybrid: GNSS-Antenne in den Rahmen oben rechts.
 4. **Wanne:** Notruftaster von außen in die Mulde klipsen, Notrufkappe aufstecken.
-   Reedkontakt in den Kanal neben der Mulde schieben, Magnet in die Klappe kleben,
-   Klappe mit dem Filamentstift einhängen. Stift an beiden Enden kurz anschmelzen.
+   Reedkontakt in den Kanal neben der Mulde schieben, Magnet in die Klappe kleben
+   (Tasche innen, Seite zum Reedkontakt), Klappe mit dem Filamentstift einhängen.
+   Stift an beiden Enden kurz anschmelzen. Die Klappe rastet seitlich leicht ein.
 5. Messingscheiben in die Unterkante kleben, Litzen durch die Löcher (von links:
    +5 V, GND, GND, LS+, LS−). Stahlscheiben daneben einkleben.
 6. Lautsprecher in den Ring über dem Gitter kleben. Lautstärketasten von innen
@@ -132,8 +142,9 @@ Elektronik siehe [festnetz-hardware.md](festnetz-hardware.md) bzw.
 
 ## Offene Punkte
 
-1. Nichts davon ist gedruckt. Toleranzen (Falz 0,2 mm, Fenster 0,4 mm, Rasthaken)
-   am eigenen Drucker prüfen.
+1. Nichts davon ist gedruckt. Toleranzen (Spiel 0,3 mm, Taster-Ausschnitt 14,1 mm,
+   Kappenstößel) mit dem Prüfstück und einer Kappe am eigenen Drucker prüfen.
+   Anpassbar über `spalt`, `mx_ausschnitt` (Gehäuse) und `stem_spiel` (Kappen).
 2. Das Handteil ist mit 94 × 210 mm groß. Das folgt aus dem 24-mm-Raster der Tasten.
    Kleiner geht nur mit engerem Raster (`raster` in `omafon_tasten.scad`).
    Schwerer zu treffen, aber leichter in der Hand. Gewicht geschätzt 250–350 g.
