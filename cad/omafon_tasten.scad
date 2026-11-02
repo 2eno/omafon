@@ -39,7 +39,7 @@ stem_spiel = 0.0;    // zusätzliche Weite, falls zu stramm
 
 /* [Front] */
 platte = 1.5;        // MX-Klemmmaß – an den Ausschnitten exakt 1,5 mm
-ausschnitt = 14.0;
+ausschnitt = 14.1;   // MX-Norm 14,0; gedruckte Löcher fallen kleiner aus
 steg_h = 3.0;        // Höhe der Taststege über der Platte
 steg_b = 2.0;
 rand = 6;

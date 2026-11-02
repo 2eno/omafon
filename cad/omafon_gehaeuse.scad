@@ -3,11 +3,14 @@
 //   openscad -D 'variante="hybrid"' -D 'teil="wanne"' -o wanne.stl omafon_gehaeuse.scad
 //
 // Teile (STL-Ausgabe liegt bereits in Druckrichtung):
-//   deckel           Oberschale: Fenster für die Tastenplatte, Hörer, LED, Mikrofon
+//   deckel           Oberschale mit eingebauter Schalterplatte (16 Cherry-MX-Taster
+//                    klipsen von vorn ein), Hörer, Mikrofon
 //   wanne            Unterschale: Notrufmulde, Lautsprecher, Akkufach, Ladekontakte,
 //                    Kodiernut, Lautstärketasten, Pi-Halter, Schraubdome
-//   tastenplatte     Schalterplatte mit Taststegen (aus omafon_tasten.scad) + Kragen
-//   akkudeckel       Deckel fürs Akkufach (1 Schraube M2,5)
+//   tastengitter     optionale Taststege zwischen den Tasten (aufkleben)
+//   hoererkopf       erhöhtes Kopfteil mit Schallrohr und LED (aufkleben)
+//   hoermuschel      weicher Ring auf dem Hörerkopf (TPU)
+//   akkudeckel       Deckel fürs Akkufach (2 Senkschrauben M2,5)
 //   notrufklappe     Klappe über dem Notrufknopf (Scharnierstift 1,75-mm-Filament,
 //                    Magnet 5 x 1 mm für den Klappenschalter)
 //   lautstaerke_plus / lautstaerke_minus   seitliche Tasten (fühlbar verschieden)
@@ -21,16 +24,21 @@ include <omafon_masse.scad>
 use <omafon_tasten.scad>
 
 /* [Auswahl] */
-teil = "uebersicht"; // [uebersicht, schnitt, deckel, wanne, tastenplatte, akkudeckel, notrufklappe, lautstaerke_plus, lautstaerke_minus, hoererkopf, hoermuschel]
+teil = "uebersicht"; // [uebersicht, schnitt, pruefstueck, deckel, wanne, tastengitter, akkudeckel, notrufklappe, lautstaerke_plus, lautstaerke_minus, hoererkopf, hoermuschel]
 
 /* [Aufbau] */
 deckel_h = 5;          // Höhe der Oberschale; der Rest gehört zur Wanne
 falz_h = 1.6;          // Zentrierfalz zwischen Wanne und Deckel
 falz_b = 1.0;
-spalt = 0.2;
-oben_bereich = 32;     // Platz über der Tastenplatte (Hörer, LED, Notruf)
-kragen = 2.5;          // Kragen der Tastenplatte unter dem Deckel
-fenster_spiel = 0.4;
+spalt = 0.3;           // Spiel zwischen Druckteilen (je Seite)
+oben_bereich = 32;     // Platz über den Tasten (Hörer, LED, Notruf)
+
+/* [Taster] */
+mx_platte = 1.6;       // Plattenstärke an den Tastern: MX 1,5 ± 0,1; 1,6 = 8 Lagen à 0,2 mm
+mx_ausschnitt = 14.1;  // MX-Norm 14,0 – gedruckte Löcher fallen kleiner aus
+mx_tasche = 15.6;      // innen um jeden Taster, Platz für die Klemmfedern
+gitter_h = 1.2;        // optionale Taststege: so niedrig, dass gedrückte Kappen frei bleiben
+gitter_b = 1.6;
 
 /* [Einbauteile] – an die echten Teile anpassen */
 hoerer_d = 15.6;       // Hörkapsel Ø15
@@ -41,6 +49,7 @@ gnss_b = 25.4;         // aktive GNSS-Keramikantenne 25 x 25 (mobil/hybrid)
 schraube_d = 2.9;      // M2,5 durch
 einsatz_d = 3.6;       // Gewindeeinsatz M2,5 (Einschmelzmutter)
 einsatz_t = 3.8;       // kurze Einsätze (M2,5 x 3,5) – der Deckel ist nur 5 mm hoch
+schraube_l = gehaeuse_dicke <= 30 ? 25 : 30;   // Zylinderschraube M2,5 x 25 bzw. x 30
 
 $fn = 40;
 
@@ -48,11 +57,14 @@ $fn = 40;
 B = gehaeuse_breite; L = gehaeuse_laenge; D = gehaeuse_dicke;
 ER = gehaeuse_eck_r; KR = gehaeuse_kante_r; W = gehaeuse_wand;
 ZS = D - deckel_h;                       // Trennebene Wanne/Deckel
+senk_t = max(2.5, ZS + 3 - schraube_l);  // Kopfsenkung: 3 mm Gewinde im Einsatz
 TF = tastenfront_mass();
 FB = TF[0]; FH = TF[1]; RASTER = TF[2]; PLATTE = TF[3]; STEG_H = TF[4];
 fenster_oben = L / 2 - oben_bereich;
 fenster_y = fenster_oben - FH / 2;       // Mitte des Tastenfensters
-platte_z = D - W - PLATTE;               // Unterkante Tastenplatte
+platte_z = D - mx_platte;                // Unterkante der Schalterplatte im Deckel
+function tasten_xy() = [for (p = tastenpositionen())
+    [p[0] * RASTER, fenster_y + 2.5 * RASTER + p[1] * RASTER, p[2]]];
 mobil = variante != "festnetz";
 
 // Akku [Breite, Länge, Dicke]: Festnetz 3000 mAh, Mobil/Hybrid 5000 mAh (Beispiel)
@@ -62,14 +74,15 @@ akku_x = -B / 2 + W + 3 + AK[0] / 2;     // links; rechts daneben Platz für Pla
 akku_oeff = [AK[0] + 6, AK[1] + 6];
 akku_mitte = [akku_x, akku_y0 + AK[1] / 2];
 // zwei Schrauben M2,5: unten links (neben der Kodiernut), oben rechts
-akku_schrauben = [[akku_mitte[0] - 18, akku_mitte[1] - akku_oeff[1] / 2 - 3.5],
-                  [akku_mitte[0] + 18, akku_mitte[1] + akku_oeff[1] / 2 + 3.5]];
+akku_schrauben = [[akku_mitte[0] - 22, akku_mitte[1] - akku_oeff[1] / 2 - 3.5],
+                  [akku_mitte[0] + 22, akku_mitte[1] + akku_oeff[1] / 2 + 3.5]];
+akku_polster = 7.6;    // Loch in der Wand für das 2,2-mm-Polster des Deckels
 
 // Positionen
 ohr_y = L / 2 - 16;
 // Hörerkopf: erhöhtes Kopfteil über den Tasten. Ohr und Muschel liegen höher als
 // die Tastenkappen (ca. 12–15 mm) – die Wange drückt so keine Taste.
-kopf_h = 15;             // über der Vorderseite
+kopf_h = 18;             // über der Vorderseite (höchste Kappe: Anrufen ca. 17,6 mm)
 kopf_y0 = L / 2 - oben_bereich + 3.5;   // Abstand zur obersten Tastenreihe bleibt greifbar
 kopf_y1 = L / 2 - gehaeuse_kante_r;     // nur auf der ebenen Deckelfläche
 kopf_x = 38;             // halbe Breite
@@ -86,9 +99,9 @@ muschel_einsatz = 1.0;   // so tief sitzt sie in der Mulde des Kopfes
 led_pos = [-25, L / 2 - 14];
 gnss_pos = [22.5, L / 2 - 19];           // rechts oben unter dem Deckel (mobil/hybrid)
 mik_y = -L / 2 + 11;
-sos_y = L / 2 - 20;                      // Notrufmulde (Rückseite), Klappe bleibt auf der ebenen Fläche
+sos_y = L / 2 - 32;                      // Notrufmulde (Rückseite): Taster bleibt unter dem Hörerhalter frei
 sos_oeff = 21;                           // Kappe Ø19,2 geht durch
-sos_tiefe = 13.6;                        // Kappe 9 + Schalter 6,6 – 2 mm versenkt
+sos_tiefe = 13.6;                        // Kappe 9 + Schalter 6,6 – 2 mm versenkt (68 Lagen à 0,2)
 sos_klappe = 29;
 ls_pos = [-20, -L / 2 + 22];             // Lautsprecher Rückseite unten
 laut_y = [L / 2 - 55, L / 2 - 75];       // Lautstärke + / − (linke Seite)
@@ -100,12 +113,10 @@ dom_x = B / 2 - 7;
 // ------------------------------------------------------------ Grundformen
 module rrect(w, d, r) { offset(r) square([w - 2 * r, d - 2 * r], center = true); }
 
+// 45°-Fase statt Rundung an Vorder- und Rückseite: beide Schalen liegen mit dieser
+// Seite auf dem Druckbett, eine Rundung wäre dort ein steiler Überhang.
 module ecke(r, kr, h) {
-    rotate_extrude($fn = 40) hull() {
-        square([0.01, h]);
-        translate([r - kr, kr]) circle(kr, $fn = 24);
-        translate([r - kr, h - kr]) circle(kr, $fn = 24);
-    }
+    rotate_extrude($fn = 40) polygon([[0, 0], [r - kr, 0], [r, kr], [r, h - kr], [r - kr, h], [0, h]]);
 }
 
 // Außenkörper, um "off" nach innen versetzt (für Innenraum/Falz)
@@ -132,16 +143,17 @@ module deckel() {
                 difference() { square(gnss_b + 1.6, center = true); square(gnss_b, center = true); }
             // Schraubdome mit Gewindeeinsatz
             for (d = dome) translate([d[0] * dom_x, d[1], ZS + 0.1]) cylinder(d = 7, h = D - W - ZS - 0.1 + 0.01);
-            // Rasthaken für die Tastenplatte (oben/unten)
-            for (s = [-1, 1], x = [-40, 0, 40]) rasthaken(x, fenster_y + s * (FH / 2 + kragen + 0.2), s);
+        }
+        // Schalterplatte: Ausschnitt durch, innen Tasche bis auf mx_platte
+        for (t = tasten_xy()) translate([t[0], t[1], 0]) {
+            translate([0, 0, D - W - 1]) linear_extrude(W + 2) square(mx_ausschnitt, center = true);
+            translate([0, 0, D - W - 1]) linear_extrude(1 + W - mx_platte) square(mx_tasche, center = true);
         }
         // Ringmulde: zentriert das Schallrohr des Hörerkopfs (Vorderseite bleibt plan)
         translate([0, ohr_y, D - 1]) difference() {
             cylinder(d = rohr_aussen + 0.4, h = 2, $fn = 64);
             translate([0, 0, -1]) cylinder(d = rohr_innen - 0.4, h = 4, $fn = 64);
         }
-        // Tastenfenster
-        translate([0, fenster_y, D - W - 1]) linear_extrude(W + 2) rrect(FB + fenster_spiel, FH + fenster_spiel, 1);
         // Hörer-Löcher, Mikrofon-Löcher, LED
         for (p = loch_muster(5.5, 1.6)) translate([p[0], ohr_y + p[1], D - W - 1]) cylinder(d = 1.6, h = W + 2, $fn = 12);
         for (p = loch_muster(3, 1.2)) translate([p[0], mik_y + p[1], D - W - 1]) cylinder(d = 1.2, h = W + 2, $fn = 12);
@@ -161,14 +173,6 @@ module ring(innen, h, breite = 1.6) {
 function loch_muster(r, a) = [for (x = [-r : a * 1.6 : r + 0.01], y = [-r : a * 1.6 : r + 0.01])
     if (x * x + y * y <= r * r) [x, y]];
 
-module rasthaken(x, y, s) {   // s = +1 oben, −1 unten; Haken greift unter den Kragen
-    translate([x - 3, y + (s > 0 ? 0 : -1.2), platte_z - 0.9]) cube([6, 1.2, D - W - platte_z + 0.9]);
-    hull() {
-        translate([x - 3, y + (s > 0 ? -0.8 : 0), platte_z - 0.9]) cube([6, 0.8 + 1.2, 0.5]);
-        translate([x - 3, y + (s > 0 ? 0 : -0.01), platte_z - 0.01]) cube([6, 1.21, 0.01]);
-    }
-}
-
 // ------------------------------------------------------------ Wanne (Unterschale)
 module wanne() {
     difference() {
@@ -182,7 +186,8 @@ module wanne() {
             // Lautsprecherhalter
             translate([ls_pos[0], ls_pos[1], W - 0.01]) ring(ls_d, 3);
             // Dom für die Akkudeckelschraube
-            for (a = akku_schrauben) translate([a[0], a[1], 0]) cylinder(d = 7, h = W + 6);
+            // breiter als das Polsterloch, damit er auf der Wand aufliegt (druckt als Brücke)
+            for (a = akku_schrauben) translate([a[0], a[1], 0]) cylinder(d = akku_polster + 3.4, h = W + 6);
             // Verstärkung an Ladekontakten und Kodiernut
             intersection() {
                 koerper(0.01);
@@ -205,8 +210,8 @@ module wanne() {
         // Akkufach: Öffnung + Falz für den Deckel
         akku_aussparung();
         for (a = akku_schrauben) {
-            translate([a[0], a[1], 1.2]) cylinder(d = einsatz_d, h = W + 6);
-            translate([a[0], a[1], -1]) cylinder(d = schraube_d, h = 4);
+            translate([a[0], a[1], -1]) cylinder(d = akku_polster, h = 1 + W);   // Polster des Deckels
+            translate([a[0], a[1], W - 0.01]) cylinder(d = einsatz_d, h = 6.2);   // Einsatz von außen
         }
         // Ladekontakte unten: Messingscheiben, Drahtlöcher, Stahlscheiben über den Magneten
         for (i = [0 : kontakt_pins - 1]) translate([(i - (kontakt_pins - 1) / 2) * kontakt_raster, -L / 2 - 1, D / 2])
@@ -219,7 +224,7 @@ module wanne() {
         // Dome: Schraube von hinten, Senkung für den Kopf
         for (d = dome) translate([d[0] * dom_x, d[1], -1]) {
             cylinder(d = schraube_d, h = ZS + 2);
-            cylinder(d = 5, h = 1 + 2.5);
+            cylinder(d = 5, h = 1 + senk_t);
         }
     }
 }
@@ -231,7 +236,7 @@ module sos_mulde_koerper() {
             koerper(0.01);
             translate([0, 0, 0]) linear_extrude(4.6) rrect(sos_klappe + 8, sos_klappe + 8, 3);
         }
-        linear_extrude(sos_tiefe + PLATTE) rrect(sos_oeff + 3.2, sos_oeff + 3.2, 3);
+        linear_extrude(sos_tiefe + mx_platte) rrect(sos_oeff + 3.2, sos_oeff + 3.2, 3);
     }
 }
 
@@ -240,7 +245,9 @@ module sos_mulde_aussparung() {
         // Mulde bis zur Schalterplatte
         translate([0, 0, -1]) linear_extrude(sos_tiefe + 1) rrect(sos_oeff, sos_oeff, 2);
         // MX-Ausschnitt in der Schalterplatte (1,5 mm)
-        translate([0, 0, sos_tiefe - 0.01]) linear_extrude(PLATTE + 1) square(14, center = true);
+        translate([0, 0, sos_tiefe - 0.01]) linear_extrude(mx_platte + 1) square(mx_ausschnitt, center = true);
+        // Rastmulden für die Klappe (leichte Raste, mit einem Finger zu öffnen)
+        for (s = [-1, 1]) translate([s * sos_klappe / 2, -sos_klappe / 2 + 5, 0.9]) sphere(d = 1.3, $fn = 12);
         // Klappenvertiefung, Griffmulde unten
         translate([0, 0, -1]) linear_extrude(1 + 1.8) rrect(sos_klappe, sos_klappe, 3);
         translate([0, -sos_klappe / 2, -1]) cylinder(d = 12, h = 1 + 1.8);
@@ -277,13 +284,13 @@ module kabelbinder_bruecke() {
 }
 
 // ------------------------------------------------------------ Kleinteile
-module tastenplatte() {
-    union() {
-        front();
-        translate([0, -2.5 * RASTER, 0]) linear_extrude(PLATTE) difference() {
-            rrect(FB + 2 * kragen, FH + 2 * kragen, 2);
-            square([FB - 0.2, FH - 0.2], center = true);
-        }
+module tastengitter() {
+    // Zusammenbau: liegt auf der Vorderseite (z = D) um die Tasten
+    translate([0, 0, D]) linear_extrude(gitter_h) difference() {
+        translate([0, fenster_y]) rrect(FB, FH, 3);
+        for (t = tasten_xy()) translate([t[0], t[1]])
+            if (t[2] == "i") rrect(40, RASTER - gitter_b, 4);
+            else rrect(RASTER - gitter_b, RASTER - gitter_b, 3);
     }
 }
 
@@ -291,12 +298,15 @@ module akkudeckel() {
     // im Zusammenbau-Koordinatensystem; Außenfläche z = 0
     translate([akku_mitte[0], akku_mitte[1], 0]) difference() {
         union() {
-            linear_extrude(1.2 - 0.05) rrect(akku_oeff[0] + 3.6, akku_oeff[1] + 3.6 + 12, 3.8);
-            linear_extrude(W) rrect(akku_oeff[0] - 0.4, akku_oeff[1] - 0.4, 2.8);
+            linear_extrude(1.2 - 0.05) rrect(akku_oeff[0] + 4 - 2 * spalt, akku_oeff[1] + 4 + 12 - 2 * spalt, 3.7);
+            linear_extrude(W) rrect(akku_oeff[0] - 2 * spalt, akku_oeff[1] - 2 * spalt, 2.7);
+            // 2,2 mm dicke Polster um die Schrauben (Senkkopf braucht Material)
+            for (a = akku_schrauben) translate([a[0] - akku_mitte[0], a[1] - akku_mitte[1], 0])
+                cylinder(d = akku_polster - 2 * spalt, h = W);
         }
         for (a = akku_schrauben) translate([a[0] - akku_mitte[0], a[1] - akku_mitte[1], -0.01]) {
             cylinder(d = schraube_d, h = 5);
-            cylinder(d1 = 5.2, d2 = schraube_d, h = 1.2);    // Senkkopf
+            cylinder(d1 = 5.4, d2 = schraube_d, h = 1.3);    // Senkkopf 90°
         }
         for (i = [-2 : 2]) translate([i * 4, akku_oeff[1] / 2 - 10, -0.01]) cube([1.2, 14, 0.5], center = true);
     }
@@ -306,7 +316,9 @@ module notrufklappe() {
     // Zusammenbau-Koordinaten: liegt in der Vertiefung um die Notrufmulde
     translate([0, sos_y, 0]) difference() {
         union() {
-            translate([0, 0, 0.05]) linear_extrude(1.7) rrect(sos_klappe - 0.6, sos_klappe - 0.6, 2.7);
+            translate([0, 0, 0.05]) linear_extrude(1.7) rrect(sos_klappe - 2 * spalt, sos_klappe - 2 * spalt, 2.7);
+            // Rastnoppen seitlich (greifen in die Mulden der Wanne, 0,25 mm Übermaß)
+            for (s = [-1, 1]) translate([s * (sos_klappe / 2 - spalt), -sos_klappe / 2 + 5, 0.9]) sphere(d = 1.1, $fn = 12);
             translate([0, sos_klappe / 2 - 1.9, 1.9]) rotate([0, 90, 0]) cylinder(d = 3.4, h = sos_klappe - 0.8, center = true);
             // Noppen außen: fühlbar "hier ist der Notruf"
             for (x = [-7, 0, 7], y = [-7, 0, 7]) translate([x, y, 0.06]) scale([1, 1, 0.6]) sphere(d = 3, $fn = 16);
@@ -369,6 +381,25 @@ module hoermuschel() {
     }
 }
 
+// Probedruck vor den großen Teilen (ca. 20 min): zwei Taster-Ausschnitte genau wie im
+// Deckel (Platte, Tasche), ein Dom mit Einsatzloch, eine Notruf-Kappe passt in den Ring.
+module pruefstueck() {
+    difference() {
+        union() {
+            linear_extrude(W) rrect(60, 32, 3);
+            translate([22, 0, W - 0.01]) cylinder(d = 7, h = 4);
+        }
+        for (x = [-17, 7]) translate([x, 0, -1]) {
+            linear_extrude(W + 2) square(mx_ausschnitt, center = true);
+            translate([0, 0, 1 + mx_platte]) linear_extrude(W) square(mx_tasche, center = true);
+        }
+        translate([22, 0, W + 4 - einsatz_t]) cylinder(d = einsatz_d, h = einsatz_t + 1);
+        translate([22, 0, -1]) cylinder(d = schraube_d, h = W + 2);
+        // Lochmaß der Lautstärketaste (8 x 8) zum Probestecken
+        translate([22, -11, -1]) linear_extrude(W + 2) rrect(8, 8, 1.5);
+    }
+}
+
 module lautstaerke(plus) {
     // Druckrichtung: Kragen unten
     difference() {
@@ -390,15 +421,14 @@ module zusammenbau(kappen = true) {
     color("#d0d0d0") deckel();
     color("#c8c8c8") hoererkopf();
     color("#222") translate([0, ohr_y, D + kopf_h - muschel_einsatz]) hoermuschel();
-    color("#333") translate([0, fenster_y + 2.5 * RASTER, platte_z]) tastenplatte();
+    color("#333") tastengitter();
     color("#cc0000") notrufklappe();
     color("#bbb") akkudeckel();
     for (y = laut_y) color("#444") translate([-B / 2 - 1.3, y, laut_z]) rotate([0, -90, 0]) rotate([0, 0, 0])
         translate([0, 0, -1.2 - W]) lautstaerke(y == laut_y[0]);
     if (kappen) {
-        TP = tastenpositionen();
-        for (p = TP) translate([p[0] * RASTER, fenster_y + 2.5 * RASTER + p[1] * RASTER, platte_z + PLATTE + 5])
-            kappe_fuer(p[2]);
+        // MX: Kappenunterkante ca. 5,6 mm über der Plattenoberseite (= Vorderseite)
+        for (t = tasten_xy()) translate([t[0], t[1], D + 5.6]) kappe_fuer(t[2]);
     }
 }
 
@@ -406,7 +436,8 @@ module zusammenbau(kappen = true) {
 module druck(name) {
     if (name == "deckel") translate([0, 0, D]) mirror([0, 0, 1]) deckel();
     else if (name == "wanne") wanne();
-    else if (name == "tastenplatte") tastenplatte();
+    else if (name == "pruefstueck") pruefstueck();
+    else if (name == "tastengitter") translate([0, 0, -D]) tastengitter();
     else if (name == "akkudeckel") akkudeckel();
     // stehend auf der Scharnierkante: Noppen außen und Röhrchen innen brauchen so keine Stützen
     else if (name == "notrufklappe") translate([0, 0, sos_klappe / 2 - 0.2]) rotate([-90, 0, 0]) translate([0, -sos_y, 0]) notrufklappe();
