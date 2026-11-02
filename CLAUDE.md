@@ -39,7 +39,7 @@ Status: Software im Simulator getestet, Hardware ungetestet.
 | `tests/test_festnetz.py` | SIP-Backend gegen FakeBaresip, Fritz!Box, Ladeschale |
 | `tests/test_hybrid.py` | Hybrid-Routing, Notruf, Zweitanruf, Sparmodus |
 | `cad/omafon_masse.scad` | Gemeinsame Maße Handteil/Ladeschale je `variante` (festnetz 30 mm, mobil/hybrid 36 mm dick) |
-| `cad/omafon_gehaeuse.scad` | Handteil-Gehäuse: deckel, wanne, tastenplatte, akkudeckel, notrufklappe, lautstaerke_*; STL in Druckrichtung |
+| `cad/omafon_gehaeuse.scad` | Handteil-Gehäuse: deckel, wanne, tastenplatte, akkudeckel, notrufklappe, lautstaerke_*, hoererkopf, hoermuschel; STL in Druckrichtung |
 | `cad/omafon_ladeschale.scad` | Ladeschale mit Lautsprecher, Federkontakten, Kodierrippe |
 | `docs/druckteile.md` | Teileliste, Druckeinstellungen, Kaufteile, Zusammenbau (liegt auch im STL-Paket) |
 | `config.festnetz.example.yaml` | Beispielkonfiguration Festnetz (nur Platzhalter) |
@@ -85,6 +85,9 @@ Im Simulator: Tasten `0-9 * #`, `a` Anrufen, `h` Auflegen, `m` Nachricht, `i` In
    **Maße von Handteil und Ladeschale nur in `cad/omafon_masse.scad`** ändern, sonst
    passt das Telefon nicht mehr in die Schale. CAD-Teile müssen ohne OpenSCAD-Warnung
    rendern (CI bricht sonst ab), STL-Ausgabe immer in Druckrichtung ohne Stützen.
+   **Ohr vor Tasten:** Hörerkopf + Muschel müssen höher stehen als jede Tastenkappe,
+   und im Gespräch legt die Auflegetaste nur gehalten auf (`hangup_hold_s`) – sonst
+   legt die Wange auf.
 7. **Phone spricht nur über `TelephonyBackend`.** Neue Netzfunktionen als Methode/
    Ereignis im Backend, nie Backend-Sonderfälle in `phone.py`. Optionale Fähigkeiten
    (`supports_sms`, `online`, `status_words`) haben sichere Standardwerte.

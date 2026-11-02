@@ -21,7 +21,7 @@ include <omafon_masse.scad>
 use <omafon_tasten.scad>
 
 /* [Auswahl] */
-teil = "uebersicht"; // [uebersicht, schnitt, deckel, wanne, tastenplatte, akkudeckel, notrufklappe, lautstaerke_plus, lautstaerke_minus, hoermuschel]
+teil = "uebersicht"; // [uebersicht, schnitt, deckel, wanne, tastenplatte, akkudeckel, notrufklappe, lautstaerke_plus, lautstaerke_minus, hoererkopf, hoermuschel]
 
 /* [Aufbau] */
 deckel_h = 5;          // Höhe der Oberschale; der Rest gehört zur Wanne
@@ -67,11 +67,22 @@ akku_schrauben = [[akku_mitte[0] - 18, akku_mitte[1] - akku_oeff[1] / 2 - 3.5],
 
 // Positionen
 ohr_y = L / 2 - 16;
-// Erhabene Hörmuschel (eigenes Teil, am besten TPU): führt das Ohr, dichtet ab
-muschel_innen = 16;      // freier Schallweg (Hörerlöcher liegen innerhalb r = 5,5)
-muschel_aussen = 24;     // bleibt auf der ebenen Deckelfläche
-muschel_h = 3.5;         // über der Vorderseite
-muschel_einsatz = 1.0;   // so tief sitzt sie in der Mulde des Deckels
+// Hörerkopf: erhöhtes Kopfteil über den Tasten. Ohr und Muschel liegen höher als
+// die Tastenkappen (ca. 12–15 mm) – die Wange drückt so keine Taste.
+kopf_h = 15;             // über der Vorderseite
+kopf_y0 = L / 2 - oben_bereich + 3.5;   // Abstand zur obersten Tastenreihe bleibt greifbar
+kopf_y1 = L / 2 - gehaeuse_kante_r;     // nur auf der ebenen Deckelfläche
+kopf_x = 38;             // halbe Breite
+kopf_r = 8;              // Ecken in der Draufsicht
+kopf_kante = 1.2;        // Rundung oben
+kopf_wand = 2;
+rohr_aussen = 22;        // Schallrohr Hörer -> Kopfoberseite, zentriert in der Deckelmulde
+rohr_innen = 16;
+// Hörmuschel (eigenes Teil, am besten TPU) auf dem Kopf
+muschel_innen = 14;      // freier Schallweg (Hörerlöcher liegen innerhalb r = 6,3)
+muschel_aussen = 19.6;   // bleibt auf der ebenen Kopffläche
+muschel_h = 3;           // über dem Kopf
+muschel_einsatz = 1.0;   // so tief sitzt sie in der Mulde des Kopfes
 led_pos = [-25, L / 2 - 14];
 gnss_pos = [22.5, L / 2 - 19];           // rechts oben unter dem Deckel (mobil/hybrid)
 mik_y = -L / 2 + 11;
@@ -124,10 +135,10 @@ module deckel() {
             // Rasthaken für die Tastenplatte (oben/unten)
             for (s = [-1, 1], x = [-40, 0, 40]) rasthaken(x, fenster_y + s * (FH / 2 + kragen + 0.2), s);
         }
-        // Ringmulde für die Hörmuschel (Vorderseite bleibt plan fürs Druckbett)
-        translate([0, ohr_y, D - muschel_einsatz]) difference() {
-            cylinder(d = muschel_aussen + 0.4, h = muschel_einsatz + 1, $fn = 64);
-            translate([0, 0, -1]) cylinder(d = muschel_innen - 0.4, h = muschel_einsatz + 3, $fn = 64);
+        // Ringmulde: zentriert das Schallrohr des Hörerkopfs (Vorderseite bleibt plan)
+        translate([0, ohr_y, D - 1]) difference() {
+            cylinder(d = rohr_aussen + 0.4, h = 2, $fn = 64);
+            translate([0, 0, -1]) cylinder(d = rohr_innen - 0.4, h = 4, $fn = 64);
         }
         // Tastenfenster
         translate([0, fenster_y, D - W - 1]) linear_extrude(W + 2) rrect(FB + fenster_spiel, FH + fenster_spiel, 1);
@@ -306,6 +317,46 @@ module notrufklappe() {
     }
 }
 
+// Kopfform in Zusammenbau-Koordinaten (steht auf z = D), "off" = nach innen versetzt
+module kopf_form(off = 0, h = kopf_h) {
+    hull() for (x = [-1, 1], y = [kopf_y0 + kopf_r, kopf_y1 - kopf_r])
+        translate([x * (kopf_x - kopf_r), y, D]) rotate_extrude($fn = 40) hull() {
+            square([kopf_r - off, 0.01]);
+            square([0.01, h - off]);
+            translate([kopf_r - off - kopf_kante, h - off - kopf_kante]) circle(kopf_kante, $fn = 16);
+        }
+}
+
+module hoererkopf() {
+    difference() {
+        union() {
+            difference() {
+                kopf_form();
+                translate([0, 0, -0.01]) kopf_form(kopf_wand);
+            }
+            intersection() {
+                kopf_form();
+                union() {
+                    // Schallrohr bis zur Kopfoberseite
+                    translate([0, ohr_y, D]) ring(rohr_innen, kopf_h, (rohr_aussen - rohr_innen) / 2);
+                    // Lichtrohr für die LED (sitzt oben im Kopf)
+                    translate([led_pos[0], led_pos[1], D]) ring(6, kopf_h, 1.5);
+                }
+            }
+            // Zentrierstummel: 1 mm in der Ringmulde des Deckels
+            translate([0, ohr_y, D - 1 + 0.1]) ring(rohr_innen + 0.2, 1, (rohr_aussen - rohr_innen - 0.6) / 2);
+        }
+        // Hörerlöcher oben, Mulde für die Hörmuschel
+        for (p = loch_muster(5.5, 1.6)) translate([p[0], ohr_y + p[1], D + kopf_h - kopf_wand - 1]) cylinder(d = 1.6, h = kopf_wand + 2, $fn = 12);
+        translate([0, ohr_y, D + kopf_h - muschel_einsatz]) difference() {
+            cylinder(d = muschel_aussen + 0.4, h = muschel_einsatz + 1, $fn = 64);
+            translate([0, 0, -1]) cylinder(d = muschel_innen - 0.4, h = muschel_einsatz + 3, $fn = 64);
+        }
+        // LED: Kopf Ø5 schaut oben heraus, Kragen liegt innen an
+        translate([led_pos[0], led_pos[1], D + kopf_h - kopf_wand - 1]) cylinder(d = led_d, h = kopf_wand + 2);
+    }
+}
+
 module hoermuschel() {
     // Druckrichtung: flache Unterseite aufs Bett, Rundung oben
     r1 = muschel_innen / 2; r2 = muschel_aussen / 2; h = muschel_einsatz + muschel_h; k = 1.6;
@@ -337,7 +388,8 @@ module lautstaerke(plus) {
 module zusammenbau(kappen = true) {
     color("#e8e8e8") wanne();
     color("#d0d0d0") deckel();
-    color("#222") translate([0, ohr_y, D - muschel_einsatz]) hoermuschel();
+    color("#c8c8c8") hoererkopf();
+    color("#222") translate([0, ohr_y, D + kopf_h - muschel_einsatz]) hoermuschel();
     color("#333") translate([0, fenster_y + 2.5 * RASTER, platte_z]) tastenplatte();
     color("#cc0000") notrufklappe();
     color("#bbb") akkudeckel();
@@ -361,6 +413,8 @@ module druck(name) {
     else if (name == "lautstaerke_plus") lautstaerke(true);
     else if (name == "lautstaerke_minus") lautstaerke(false);
     else if (name == "hoermuschel") hoermuschel();
+    // Oberseite aufs Bett: Wände und Rohre wachsen frei nach oben
+    else if (name == "hoererkopf") translate([0, 0, D + kopf_h]) mirror([0, 0, 1]) hoererkopf();
 }
 
 echo(str("Variante ", variante, ": Handteil ", B, " x ", L, " x ", D, " mm, Akku ", AK[0], " x ", AK[1], " x ", AK[2]));

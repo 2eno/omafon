@@ -79,7 +79,7 @@ jobs:
           # Gehäuse und Ladeschale je Variante (mobil = hybrid: gleiche Maße)
           for v in festnetz hybrid; do
             dir=$([ "$v" = festnetz ] && echo festnetz || echo mobil_hybrid)
-            for teil in deckel wanne tastenplatte akkudeckel notrufklappe lautstaerke_plus lautstaerke_minus hoermuschel; do
+            for teil in deckel wanne tastenplatte akkudeckel notrufklappe lautstaerke_plus lautstaerke_minus hoererkopf hoermuschel; do
               SCAD=cad/omafon_gehaeuse.scad render "gehaeuse/$dir/$teil" -D "variante=\"$v\"" -D "teil=\"$teil\""
             done
             for teil in schale boden kontakttraeger; do
