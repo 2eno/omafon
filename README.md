@@ -5,7 +5,15 @@
 [![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-green)](LICENSE)
 
 Sprechendes Telefon für Menschen mit starker Sehbehinderung.
-Raspberry Pi Zero 2 W + Waveshare SIM7600E-H 4G HAT, Python 3 (asyncio).
+Raspberry Pi Zero 2 W, Python 3 (asyncio), zwei Varianten:
+
+| Variante | `backend:` | Netz | Hardware |
+|---|---|---|---|
+| Mobilfunk | `sim7600` | LTE, SMS, GPS | Waveshare SIM7600E-H 4G HAT |
+| Festnetz | `sip` | Fritz!Box per WLAN (IP-Telefon), Anrufbeantworter, Telefonbuch | Ladeschale mit Lautsprecher, kein Modem |
+
+Festnetz: Recherche und Bewertung in [docs/festnetz-recherche.md](docs/festnetz-recherche.md),
+Stückliste und Verkabelung in [docs/festnetz-hardware.md](docs/festnetz-hardware.md).
 
 ![Tastenfeld: weiße Ziffernkappen mit schwarzen erhabenen Ziffern auf dunkler Front, gelbe Anruftaste, schwarze Auflegetaste mit weißem Balken, breite Info-Taste](cad/tastenfeld_vorschau.png)
 
@@ -42,17 +50,24 @@ bzw. `-D 'farbteil="zeichen"'`.
 omafon/
   main.py       Start, Watchdog, PC-Simulator (--sim)
   phone.py      Zustandsautomat: Wählen, Anrufe, SMS, Diktat, Notruf
-  modem.py      AT-Treiber SIM7600 (+ SimModem)
+  telephony.py  Schnittstelle TelephonyBackend + Auswahl über config.yaml
+  modem.py      Backend sim7600: AT-Treiber SIM7600 (+ SimModem)
+  sip.py        Backend sip: baresip über ctrl_tcp, Fritz!Box, Verbindungsüberwachung
+  sipsim.py     nachgebautes baresip + Fritz!Box für Tests und --sim
+  fritz.py      TR-064: Telefonbuch, Anrufbeantworter
+  notify.py     Telegram/E-Mail statt SMS (Festnetz, optional)
   pdu.py        SMS im PDU-Modus: Umlaute, Emojis, lange SMS
   audio.py      Piper-Sprachausgabe mit Cache, Töne, TPA2016-Verstärker
   stt.py        Vosk-Spracherkennung (Namen + Diktat), optional Whisper-Server
   hardware.py   Tasten (MCP23017 + GPIO), Entprellung, Akku, Vibration
   numbers.py    "zwo" statt "zwei", Nummern in Gruppen, Uhrzeit
 tools/prerender.py   feste Ansagen vorab erzeugen
-cad/omafon_tasten.scad  Tastenkappen und Tastenfront (OpenSCAD)
+cad/omafon_tasten.scad     Tastenkappen und Tastenfront (OpenSCAD)
+cad/omafon_ladeschale.scad Ladeschale mit Lautsprecher (Festnetz)
 systemd/omafon.service
-tests/test_omafon.py    23 Tests, laufen ohne Hardware
-docs/                   Stückliste und Verkabelung
+tests/test_omafon.py       23 Tests (Kern, Mobilfunk), ohne Hardware
+tests/test_festnetz.py     29 Tests (SIP-Backend, Fritz!Box, Ladeschale), ohne Hardware
+docs/                      Stückliste, Verkabelung, Festnetz-Recherche und -Hardware
 ```
 
 ## Am PC ausprobieren (ohne Hardware)
@@ -65,6 +80,26 @@ python3 -m omafon.main --config config.example.yaml --sim
 
 Im Simulator tippst du Tasten (`0171`, `a` = Anrufen, `h` = Auflegen, `Lm` = Nachricht lang)
 und Netzereignisse (`!ring +491711234567`, `!sms +491609876543 Hallo Mama`, `!sag maria`).
+
+Festnetz-Variante im Simulator (echtes SIP-Backend gegen nachgebautes baresip):
+
+```bash
+python3 -m omafon.main --config config.festnetz.example.yaml --sim
+```
+
+Dort legt `!sms <nr>` eine Nachricht auf den Anrufbeantworter, `!wlan aus` / `!wlan an`
+trennt die Fritz!Box (nach 10 s kommt „Keine Verbindung zur Fritzbox“),
+`lade` / `ab` stellt das Telefon in die Schale bzw. hebt es ab.
+
+## Festnetz auf dem Pi (zusätzlich zur Installation unten)
+
+```bash
+sudo apt install baresip ffmpeg python3-fritzconnection
+```
+
+Fritz!Box einrichten wie in [docs/festnetz-recherche.md](docs/festnetz-recherche.md#7-was-in-der-fritzbox-einzurichten-ist)
+beschrieben, dann `config.festnetz.example.yaml` nach `/etc/omafon/config.yaml`
+kopieren und die Platzhalter ersetzen. Omafon startet baresip selbst.
 
 ## Erster Test am Modem – VOR dem Gehäusebau
 
