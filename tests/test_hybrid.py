@@ -131,6 +131,17 @@ class HybridTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.hy.active, "mobile")
         self.assertNotIn(P["not_reached"], self.said())
 
+    async def test_weak_wifi_prefers_mobile(self):
+        wireless = Path(self.tmp.name) / "wireless"
+        head = "Inter-| sta-|   Quality        |   Discarded packets\n face | tstatus | link level noise |\n"
+        wireless.write_text(head + "wlan0: 0000   20.  -82.  -256        0      0      0\n")
+        self.hy.home.wireless_path = str(wireless)
+        self.assertTrue(self.hy.wifi_weak())
+        self.assertEqual(self.hy._order("0301234"), ["mobile", "home"])
+        self.assertEqual(self.hy._order("112"), ["mobile", "home"])
+        wireless.write_text(head + "wlan0: 0000   60.  -55.  -256        0      0      0\n")
+        self.assertEqual(self.hy._order("0301234"), ["home", "mobile"])
+
     async def test_emergency_routing(self):
         self.assertEqual(self.hy._order("112"), ["home", "mobile"])
         await self.hy.dial("112")                            # zu Hause: Festnetz

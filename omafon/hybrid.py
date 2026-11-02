@@ -39,6 +39,7 @@ HYBRID_DEFAULTS = {
     "mobile_poll_s": 30,           # Empfang (AT+CSQ) abfragen
     "no_network_grace_s": 10,      # erst danach "Kein Netz" ansagen
     "announce_mode": False,        # "Zu Hause …" / "Unterwegs …" ansagen
+    "weak_wifi_dbm": -75,          # schwächeres WLAN (Garten, Wohnungsrand): lieber Mobilfunk
 }
 EMERGENCY = ("112", "110")
 CALL_EVENTS = ("call_begin", "call_end", "no_carrier", "busy", "no_answer", "missed")
@@ -249,8 +250,14 @@ class HybridBackend(TelephonyBackend):
             self._emit("link_lost", "no_network")
 
     # ------------------------------------------------------------ Telefonie
+    def wifi_weak(self) -> bool:
+        dbm = self.home._wifi_dbm() if hasattr(self.home, "_wifi_dbm") else None
+        return dbm is not None and dbm < float(self.opt["weak_wifi_dbm"])
+
     def _order(self, number: str) -> list[str]:
         first = self.opt["emergency_prefer"] if number in EMERGENCY else self.opt["prefer"]
+        if first == "home" and self.home.online and self.mobile_ok and self.wifi_weak():
+            first = "mobile"                     # Gespräch würde am WLAN-Rand abreißen
         return [first, "mobile" if first == "home" else "home"]
 
     async def dial(self, number: str) -> None:

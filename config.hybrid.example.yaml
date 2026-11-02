@@ -13,6 +13,7 @@ hybrid:
                                #       auf die Festnetznummer beim Anbieter einrichten!)
   radio_off_after_s: 300
   announce_mode: false         # true: "Zu Hause …" / "Unterwegs …" beim Wechsel ansagen
+  weak_wifi_dbm: -75           # schwächeres WLAN (Garten): Anrufe lieber über Mobilfunk
   no_network_grace_s: 10
 owner_name: Oma Erika
 

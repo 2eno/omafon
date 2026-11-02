@@ -85,7 +85,7 @@ class HelperTests(unittest.TestCase):
         self.assertIn("<sip:omafon-ip@fritz.box>", files["accounts"])
 
     def test_example_configs_have_no_real_secrets(self):
-        for name in ("config.example.yaml", "config.festnetz.example.yaml"):
+        for name in ("config.example.yaml", "config.festnetz.example.yaml", "config.hybrid.example.yaml"):
             text = (CFG.parent / name).read_text(encoding="utf-8")
             self.assertNotRegex(text, r"\d{6,}:[A-Za-z0-9_-]{30,}")      # Telegram-Token
             for line in text.splitlines():
