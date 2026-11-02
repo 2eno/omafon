@@ -9,12 +9,14 @@ Raspberry Pi Zero 2 W, Python 3 (asyncio), zwei Varianten:
 
 | Variante | `backend:` | Netz | Hardware |
 |---|---|---|---|
-| Mobilfunk | `sim7600` | LTE, SMS, GPS | Waveshare SIM7600E-H 4G HAT |
-| Festnetz | `sip` | Fritz!Box per WLAN (IP-Telefon), Anrufbeantworter, Telefonbuch | Ladeschale mit Lautsprecher, kein Modem |
-| Hybrid | `hybrid` | zu Hause Fritz!Box, unterwegs LTE – automatisch | beides, größerer Akku ([docs/hybrid.md](docs/hybrid.md)) |
+| Festnetz | `sip` | Fritz!Box per WLAN (IP-Telefon), Anrufbeantworter, Telefonbuch | Handteil 30 mm, Ladeschale mit Lautsprecher |
+| Hybrid | `hybrid` | zu Hause Fritz!Box, unterwegs LTE mit SMS und GPS – automatisch | zusätzlich SIM7600E-H-HAT, Handteil 36 mm ([docs/hybrid.md](docs/hybrid.md)) |
 
-Festnetz: Recherche und Bewertung in [docs/festnetz-recherche.md](docs/festnetz-recherche.md),
-Stückliste und Verkabelung in [docs/festnetz-hardware.md](docs/festnetz-hardware.md).
+- **Stückliste:** [docs/stueckliste.md](docs/stueckliste.md)
+- **Verkabelung:** [docs/verkabelung.md](docs/verkabelung.md)
+- **Druckteile und Zusammenbau:** [docs/druckteile.md](docs/druckteile.md)
+- Hintergrund: [Festnetz-Recherche](docs/festnetz-recherche.md),
+  [Festnetz-Hardware und Strombilanz](docs/festnetz-hardware.md)
 
 ![Tastenfeld: weiße Ziffernkappen mit schwarzen erhabenen Ziffern auf dunkler Front, gelbe Anruftaste, schwarze Auflegetaste mit weißem Balken, breite Info-Taste](cad/tastenfeld_vorschau.png)
 
@@ -57,7 +59,7 @@ omafon/
   main.py       Start, Watchdog, PC-Simulator (--sim)
   phone.py      Zustandsautomat: Wählen, Anrufe, SMS, Diktat, Notruf
   telephony.py  Schnittstelle TelephonyBackend + Auswahl über config.yaml
-  modem.py      Backend sim7600: AT-Treiber SIM7600 (+ SimModem)
+  modem.py      Mobilfunkteil des Hybrids: AT-Treiber SIM7600 (+ SimModem)
   sip.py        Backend sip: baresip über ctrl_tcp, Fritz!Box, Verbindungsüberwachung
   sipsim.py     nachgebautes baresip + Fritz!Box für Tests und --sim
   hybrid.py     Backend hybrid: Fritz!Box + Mobilfunk, Routing, Sparmodus
@@ -74,7 +76,7 @@ cad/omafon_gehaeuse.scad   Handteil: Prüfstück, Deckel mit Schalterplatte, Wan
 cad/omafon_tasten.scad     Tastenkappen und Tastenfront (OpenSCAD)
 cad/omafon_ladeschale.scad Ladeschale mit Lautsprecher
 systemd/omafon.service
-tests/test_omafon.py       23 Tests (Kern, Mobilfunk), ohne Hardware
+tests/test_omafon.py       26 Tests (Kern, Tasten, SMS, Notruf, Pinbelegung), ohne Hardware
 tests/test_festnetz.py     30 Tests (SIP-Backend, Fritz!Box, Ladeschale), ohne Hardware
 tests/test_hybrid.py       15 Tests (Routing, Notruf, Zweitanruf, Sparmodus), ohne Hardware
 docs/                      Stückliste, Verkabelung, Festnetz-Recherche und -Hardware
@@ -85,19 +87,13 @@ docs/                      Stückliste, Verkabelung, Festnetz-Recherche und -Har
 ```bash
 pip install -r requirements-dev.txt     # nur PyYAML
 python3 -m unittest discover -s tests -v
-python3 -m omafon.main --config config.example.yaml --sim
-```
-
-Im Simulator tippst du Tasten (`0171`, `a` = Anrufen, `h` = Auflegen, `Lm` = Nachricht lang)
-und Netzereignisse (`!ring +491711234567`, `!sms +491609876543 Hallo Mama`, `!sag maria`).
-
-Festnetz-Variante im Simulator (echtes SIP-Backend gegen nachgebautes baresip):
-
-```bash
 python3 -m omafon.main --config config.festnetz.example.yaml --sim
 ```
 
-Dort legt `!sms <nr>` eine Nachricht auf den Anrufbeantworter, `!wlan aus` / `!wlan an`
+Im Simulator tippst du Tasten (`0171`, `a` = Anrufen, `h` = Auflegen, `Lh` = Auflegen
+lang/gehalten, `Lm` = Nachricht lang) und Netzereignisse (`!ring +491711234567`,
+`!sag maria`). Das Festnetz-Backend läuft dabei echt gegen ein nachgebautes baresip:
+`!sms <nr>` legt `!sms <nr>` eine Nachricht auf den Anrufbeantworter, `!wlan aus` / `!wlan an`
 trennt die Fritz!Box (nach 10 s kommt „Keine Verbindung zur Fritzbox“),
 `lade` / `ab` stellt das Telefon in die Schale bzw. hebt es ab.
 
@@ -115,7 +111,7 @@ Fritz!Box einrichten wie in [docs/festnetz-recherche.md](docs/festnetz-recherche
 beschrieben, dann `config.festnetz.example.yaml` nach `/etc/omafon/config.yaml`
 kopieren und die Platzhalter ersetzen. Omafon startet baresip selbst.
 
-## Erster Test am Modem – VOR dem Gehäusebau
+## Hybrid: erster Test am Modem – VOR dem Gehäusebau
 
 ```bash
 sudo apt install minicom

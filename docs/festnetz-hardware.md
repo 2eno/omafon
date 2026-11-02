@@ -1,6 +1,6 @@
 # Festnetz-Variante: Hardware
 
-Gegenüber der Mobilfunk-Variante entfallen **Modem, SIM und GPS**. Neu sind die
+Gegenüber dem Hybridgerät entfallen **Modem, SIM und GPS**. Neu sind die
 **Ladeschale mit Lautsprecher** und die **Federkontakte**. Tasten, Notrufknopf
 mit Klappe, Verstärker, Hörkapsel, Mikrofon und Akku-Messung bleiben gleich, ebenso
 die Software-Schicht dafür (`hardware.py`, `audio.py`).
@@ -55,7 +55,7 @@ Versand). Nur Pi und Modem habe ich gegen Händlerangaben geprüft [1, 2].
 | Pi optimiert (HDMI, Bluetooth, Kamera-Erkennung aus) | ca. 0,46–0,50 W | 92,7 mA [3] |
 | Verstärker abgeschaltet, MCP23017, MAX17048, LED blinkend | ca. 0,03 W | Datenblattwerte, grob |
 | Gespräch (WLAN aktiv, Audio, baresip) | ca. 1,2–1,5 W | Annahme, am Gerät messen |
-| *zum Vergleich: SIM7600 in Ruhe* | *ca. 0,1 W*, Sendespitzen bis 2 A | Mobilfunk-Variante |
+| *zum Vergleich: SIM7600 in Ruhe* | *ca. 0,1 W*, Sendespitzen bis 2 A | Hybridgerät |
 
 Rechnung 3000 mAh: 3,7 V × 3,0 Ah = 11,1 Wh; nach Wandlern (ca. 85 %) etwa 9,4 Wh.
 - Bereitschaft: 9,4 Wh ÷ 0,63 W ≈ **15 h**, optimiert ÷ 0,5 W ≈ **19 h**

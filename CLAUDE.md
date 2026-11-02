@@ -6,8 +6,13 @@ Omafon ist ein sprechendes Telefon für Menschen mit starker Sehbehinderung.
 Jeder Tastendruck wird angesagt, eingehende Anrufe und SMS werden vorgelesen,
 SMS können diktiert werden, und ein Notrufknopf ruft eine Kette von Kontakten an.
 
-- Hardware: Raspberry Pi Zero 2 W, Waveshare SIM7600E-H 4G HAT, MCP23017
-  (Ziffernblock per I²C), TPA2016 (Verstärker), MAX17048 (Akku), CM108-Soundkarte.
+- Zwei Varianten: **Festnetz** (Fritz!Box per WLAN/SIP, `backend: sip`) und
+  **Hybrid** (zusätzlich LTE-Modem für unterwegs, `backend: hybrid`). Ein reines
+  Handy gibt es nicht mehr; `modem.py` ist nur noch der Mobilfunkteil des Hybrids.
+- Hardware: Raspberry Pi Zero 2 W, MCP23017 (Ziffernblock per I²C), TPA2016
+  (Verstärker), MAX17048 (Akku), CM108-Soundkarte, Ladeschale; Hybrid zusätzlich
+  Waveshare SIM7600E-H 4G HAT. Stückliste/Verkabelung: `docs/stueckliste.md`,
+  `docs/verkabelung.md`.
 - Software: Python 3 (asyncio), eine Ereignis-Warteschlange, ein Zustandsautomat.
 - Sprachausgabe: Piper (Fallback espeak-ng), feste Ansagen vorab gerendert.
 - Spracherkennung: Vosk offline, optional eigener Whisper-Server.
@@ -21,8 +26,8 @@ Status: Software im Simulator getestet, Hardware ungetestet.
 |---|---|
 | `omafon/main.py` | Start, systemd-Watchdog, PC-Simulator (`--sim`) |
 | `omafon/phone.py` | Zustandsautomat (Wählen, Anrufe, SMS, Diktat, Notruf); `P`-Dict mit allen festen Ansagen |
-| `omafon/telephony.py` | Schnittstelle `TelephonyBackend`, `create_backend()` (config `backend: sim7600 \| sip`) |
-| `omafon/modem.py` | Backend `sim7600`: AT-Treiber SIM7600, URC-Auswertung; `SimModem` für Tests |
+| `omafon/telephony.py` | Schnittstelle `TelephonyBackend`, `create_backend()` (config `backend: sip \| hybrid`) |
+| `omafon/modem.py` | Mobilfunkteil des Hybrids: AT-Treiber SIM7600, URC-Auswertung; `SimModem` für Tests |
 | `omafon/sip.py` | Backend `sip`: baresip über ctrl_tcp, Fritz!Box-AB und -Telefonbuch, Verbindungsüberwachung |
 | `omafon/sipsim.py` | `FakeBaresip` (ctrl_tcp-Server), `SipSimulator`, `LogNotifier` für Tests und `--sim` |
 | `omafon/hybrid.py` | Backend `hybrid`: Fritz!Box + Mobilfunk gleichzeitig, Routing, Sparmodus; `HybridSimulator` |
@@ -35,14 +40,15 @@ Status: Software im Simulator getestet, Hardware ungetestet.
 | `omafon/numbers.py` | Ziffernwörter ("zwo"), Nummern in Gruppen, Uhrzeit/Datum |
 | `omafon/config.py` | `config.yaml` laden, Kontakte, Notrufkette |
 | `tools/prerender.py` | Alle festen Ansagen vorab als WAV erzeugen |
-| `tests/test_omafon.py` | Kern- und Mobilfunk-Tests ohne Hardware (Sim-Klassen) |
+| `tests/test_omafon.py` | Kern-Tests (Tasten, Anrufe, SMS, Notruf) mit SimModem ohne Hardware |
 | `tests/test_festnetz.py` | SIP-Backend gegen FakeBaresip, Fritz!Box, Ladeschale |
 | `tests/test_hybrid.py` | Hybrid-Routing, Notruf, Zweitanruf, Sparmodus |
-| `cad/omafon_masse.scad` | Gemeinsame Maße Handteil/Ladeschale je `variante` (festnetz 30 mm, mobil/hybrid 36 mm dick) |
+| `cad/omafon_masse.scad` | Gemeinsame Maße Handteil/Ladeschale je `variante` (festnetz 30 mm, hybrid 36 mm dick) |
 | `cad/omafon_gehaeuse.scad` | Handteil-Gehäuse: pruefstueck, deckel (mit Schalterplatte), wanne, tastengitter, akkudeckel, notrufklappe, lautstaerke_*, hoererkopf, hoermuschel; STL in Druckrichtung |
 | `cad/omafon_ladeschale.scad` | Ladeschale mit Lautsprecher, Federkontakten, Kodierrippe |
 | `docs/druckteile.md` | Teileliste, Druckeinstellungen, Kaufteile, Zusammenbau (liegt auch im STL-Paket) |
-| `config.festnetz.example.yaml` | Beispielkonfiguration Festnetz (nur Platzhalter) |
+| `config.festnetz.example.yaml`, `config.hybrid.example.yaml` | Beispielkonfigurationen (nur Platzhalter) |
+| `docs/stueckliste.md`, `docs/verkabelung.md` | Stückliste mit Preisen, Verkabelung/Pinbelegung beider Varianten |
 | `cad/omafon_tasten.scad` | Tastenkappen und Tastenfront, parametrisch |
 | `systemd/omafon.service` | Dienst mit Watchdog |
 
@@ -51,8 +57,7 @@ Status: Software im Simulator getestet, Hardware ungetestet.
 ```bash
 pip install -r requirements-dev.txt                       # nur PyYAML
 python3 -m unittest discover -s tests -v                  # Tests
-python3 -m omafon.main --config config.example.yaml --sim # Simulator (Daten in ./sim-data)
-python3 -m omafon.main --config config.festnetz.example.yaml --sim  # Festnetz-Simulator
+python3 -m omafon.main --config config.festnetz.example.yaml --sim  # Festnetz-Simulator (Daten in ./sim-data)
 python3 -m omafon.main --config config.hybrid.example.yaml --sim    # Hybrid-Simulator
 python3 -m tools.prerender /etc/omafon/config.yaml        # Ansagen vorab rendern (Pi)
 openscad -D 'teil="ziffer"' -D 'ziffer="5"' -o taste_5.stl cad/omafon_tasten.scad
@@ -100,5 +105,7 @@ Im Simulator: Tasten `0-9 * #`, `a` Anrufen, `h` Auflegen, `m` Nachricht, `i` In
     anderen; 110/112 über Mobilfunk auch ohne eigenes Netz. „Kein Netz“ erst, wenn
     beide Wege fehlen. Zweitanrufe auf dem anderen Weg abweisen, nie anklopfen.
 11. Keine echten Telefonnummern, Standorte oder Zugangsdaten committen.
-   `config.yaml` ist in `.gitignore`; Beispiele gehören in `config.example.yaml` bzw.
-   `config.festnetz.example.yaml`, Kennwörter dort nur als `PLATZHALTER_…`.
+   `config.yaml` ist in `.gitignore`; Beispiele gehören in `config.festnetz.example.yaml`
+   bzw. `config.hybrid.example.yaml`, Kennwörter dort nur als `PLATZHALTER_…`.
+12. **Pinbelegung nur gemeinsam ändern:** GPIO-/MCP-Belegung steht in
+   `omafon/hardware.py` und `docs/verkabelung.md` – immer beide anpassen.

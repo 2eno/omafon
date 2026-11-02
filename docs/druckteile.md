@@ -8,10 +8,10 @@ schon in Druckrichtung:
 tasten/einfarbig/            17 Tastenkappen (Farbwechsel oder einfarbig)
 tasten/zweifarbig/           dieselben Kappen als *_kappe.stl + *_zeichen.stl (Mehrmaterial)
 gehaeuse/festnetz/           Handteil 94 x 210 x 30 mm
-gehaeuse/mobil_hybrid/       Handteil 94 x 210 x 36 mm (Platz für den SIM7600-HAT)
+gehaeuse/hybrid/             Handteil 94 x 210 x 36 mm (Platz für den SIM7600-HAT)
                              (Hörerkopf + Muschel stehen 21 mm über der Vorderseite)
 ladeschale/festnetz/         Ladeschale passend zum 30-mm-Handteil
-ladeschale/mobil_hybrid/     Ladeschale passend zum 36-mm-Handteil
+ladeschale/hybrid/           Ladeschale passend zum 36-mm-Handteil
 ```
 
 ![Handteil von vorn](../cad/gehaeuse_vorschau_vorn.png)
@@ -57,7 +57,6 @@ oben. Details und Farbwahl: Kommentar in `cad/omafon_tasten.scad`.
 | `boden.stl` | 1 | beliebig | flach | Gewichtskammer, Gummifüße |
 | `kontakttraeger.stl` | 1 | beliebig | flach | 5 Federkontakte, 2 Magnete |
 
-Mobil- und Hybridgerät haben dieselben Maße; `mobil_hybrid` passt für beide.
 
 ## Druckeinstellungen
 
@@ -78,7 +77,7 @@ Mobil- und Hybridgerät haben dieselben Maße; `mobil_hybrid` passt für beide.
 | Teil | Stück | Wo |
 |---|---|---|
 | Gewindeeinsatz M2,5 × 3,5 (Einschmelzmutter, Ø 3,6 mm Loch) | 6 (+1 Prüfstück) | 4 im Deckel, 2 in den Akkudeckel-Domen |
-| Zylinderschraube M2,5 × **25** (Festnetz) bzw. × **30** (Mobil/Hybrid) | 4 | Gehäuse, von hinten (Senkung so tief, dass 3 mm im Einsatz greifen) |
+| Zylinderschraube M2,5 × **25** (Festnetz) bzw. × **30** (Hybrid) | 4 | Gehäuse, von hinten (Senkung so tief, dass 3 mm im Einsatz greifen) |
 | Senkschraube M2,5 × 6 | 2 | Akkudeckel |
 | Schraube M2,5 × 6 (selbstformend) oder Abstandsbolzen | 4 | Pi Zero 2 W |
 | Filament 1,75 mm, 32 mm lang | 1 | Scharnierstift Notrufklappe |
@@ -90,8 +89,8 @@ Mobil- und Hybridgerät haben dieselben Maße; `mobil_hybrid` passt für beide.
 | Federkontakt (Pogo-Pin) Ø 2 mm, Magnet 8 × 3 mm | 5 / 2 | Ladeschale |
 | Gummifüße Ø 10, Stahlscheiben 150–250 g, M3 × 8 | 4 / – / 2 | Ladeschale |
 
-Elektronik siehe [festnetz-hardware.md](festnetz-hardware.md) bzw.
-[hybrid.md](hybrid.md).
+Elektronik siehe [stueckliste.md](stueckliste.md), Anschlüsse in
+[verkabelung.md](verkabelung.md).
 
 ## Zusammenbau Handteil
 
@@ -105,7 +104,7 @@ Elektronik siehe [festnetz-hardware.md](festnetz-hardware.md) bzw.
    Beine verlängern), Drähte durch das LED-Loch im Deckel. Hörerkopf mit 2K-Kleber
    auf den Deckel kleben; der Stummel des Schallrohrs zentriert ihn in der
    Ringmulde über dem Hörer. Hörmuschel oben in die Mulde des Kopfs kleben.
-   Mobil/Hybrid: GNSS-Antenne in den Rahmen oben rechts.
+   Hybrid: GNSS-Antenne in den Rahmen oben rechts.
 4. **Wanne:** Notruftaster von außen in die Mulde klipsen, Notrufkappe aufstecken.
    Reedkontakt in den Kanal neben der Mulde schieben, Magnet in die Klappe kleben
    (Tasche innen, Seite zum Reedkontakt), Klappe mit dem Filamentstift einhängen.
@@ -114,7 +113,7 @@ Elektronik siehe [festnetz-hardware.md](festnetz-hardware.md) bzw.
    +5 V, GND, GND, LS+, LS−). Stahlscheiben daneben einkleben.
 6. Lautsprecher in den Ring über dem Gitter kleben. Lautstärketasten von innen
    einsetzen, Lochraster-Platinen mit den 6×6-Tastern in die Schienen schieben.
-7. Pi auf die Abstandshalter schrauben (Mobil/Hybrid: HAT aufstecken,
+7. Pi auf die Abstandshalter schrauben (Hybrid: HAT aufstecken,
    Schaumstoffpad zum Akku). Kleine Platinen mit Klebepads und Kabelbindern ins
    Feld rechts neben dem Akku.
 8. Akku einlegen, Akkudeckel mit 2 Senkschrauben schließen.
