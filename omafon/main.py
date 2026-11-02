@@ -53,6 +53,8 @@ Tasten:  0-9 * #   a=Anrufen  h=Auflegen  m=Nachricht  i=Info  + - =Lautstärke
 Netz:    !ring <nr>   !sms <nr> <text>   !annahme   !ende   !besetzt
          Festnetz (backend: sip): !sms legt eine Anrufbeantworter-Nachricht ab,
          !wlan aus / !wlan an trennt bzw. verbindet die Fritz!Box
+         Hybrid: !ring = Festnetz wenn zu Hause, !mring = Handynummer, !sms = SMS,
+         !ab <nr> = Anrufbeantworter, !wlan aus/an, !netz aus/an (Funkloch)
 Sprache: !sag <text>  (nächstes Ergebnis der Spracherkennung)
 """
 
@@ -88,6 +90,12 @@ def sim_console(loop, events, hw, modem, stt) -> None:
                 loop.call_soon_threadsafe(stt.answers.put_nowait, rest)
             elif cmd == "wlan" and hasattr(modem, "link"):
                 loop.call_soon_threadsafe(modem.link, rest.strip() != "aus")
+            elif cmd == "netz" and hasattr(modem, "netz"):
+                loop.call_soon_threadsafe(modem.netz, rest.strip() != "aus")
+            elif cmd == "mring" and hasattr(modem, "inject_mobile_call"):
+                loop.call_soon_threadsafe(modem.inject_mobile_call, rest or "+491711234567")
+            elif cmd == "ab" and hasattr(modem, "inject_voicemail"):
+                loop.call_soon_threadsafe(modem.inject_voicemail, rest or "+491609876543")
             continue
         if line in ("auf", "zu"):
             put(KeyEvent("SOS_COVER", "down" if line == "auf" else "up"))

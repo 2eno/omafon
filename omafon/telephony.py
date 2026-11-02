@@ -14,6 +14,8 @@ Ereignisse an Phone (ModemEvent.kind):
   sms         neue Nachricht abrufbar (data = Index für read_sms)
   link_lost   Verbindung zum Netz/zur Fritz!Box weg (nur Backends mit link)
   link_ok     Verbindung wieder da
+              Bei beiden darf data einen Schlüssel aus phone.P nennen, dann sagt
+              Phone diesen Text (z. B. "mode_home", "no_network").
 """
 from __future__ import annotations
 
@@ -49,6 +51,7 @@ class TelephonyBackend:
     name = "basis"
     supports_sms = False         # Textnachrichten senden möglich?
     has_link = False             # meldet link_lost/link_ok?
+    offline_key = "link_lost"    # P-Schlüssel der Ansage, wenn offline (Phone)
 
     # ---------------------------------------------------------------- Pflicht
     async def start(self) -> None:
@@ -105,7 +108,7 @@ class TelephonyBackend:
         return None
 
 
-BACKENDS = ("sim7600", "sip")
+BACKENDS = ("sim7600", "sip", "hybrid")
 
 
 def create_backend(cfg, events: asyncio.Queue, loop: asyncio.AbstractEventLoop,
@@ -124,6 +127,18 @@ def create_backend(cfg, events: asyncio.Queue, loop: asyncio.AbstractEventLoop,
             m = SimModem(events)
             return m, m
         return Modem(cfg.serial_port, cfg.serial_baud, events, loop), None
+    if kind == "hybrid":
+        from .hybrid import HybridBackend
+        if sim:
+            from .hybrid import HybridSimulator
+            simulator = HybridSimulator(cfg)
+            return simulator.backend(events), simulator
+        from .modem import Modem
+        from .sip import BaresipBackend
+        return HybridBackend(
+            cfg, events,
+            home=lambda q: BaresipBackend(cfg, q),
+            mobile=lambda q: Modem(cfg.serial_port, cfg.serial_baud, q, loop)), None
     from .sip import BaresipBackend
     if sim:
         from .sipsim import SipSimulator

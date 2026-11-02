@@ -27,7 +27,7 @@ class Contact:
 @dataclass
 class Config:
     owner_name: str = "Oma"
-    backend: str = "sim7600"                 # "sim7600" (Mobilfunk) oder "sip" (Fritz!Box)
+    backend: str = "sim7600"                 # "sim7600" (Mobilfunk), "sip" (Fritz!Box), "hybrid" (beides)
     country_code: str = "49"
     contacts: list[Contact] = field(default_factory=list)
     emergency_ring_seconds: int = 30
@@ -62,6 +62,7 @@ class Config:
     sip: dict = field(default_factory=dict)
     fritz: dict = field(default_factory=dict)
     notify: dict = field(default_factory=dict)
+    hybrid: dict = field(default_factory=dict)      # Schlüssel siehe omafon/hybrid.py
     phonebook: dict = field(default_factory=dict)   # Nummer -> Name (wird aus der Fritz!Box geladen)
     home_position: list[float] | None = None        # [Breite, Länge] für den Notruf-Hinweis, optional
     link_reminder_minutes: int = 10                  # Verbindung weg: Ansage wiederholen
@@ -109,7 +110,7 @@ def load(path: str | Path) -> Config:
     cc = str(raw.get("country_code", "49"))
     if raw.get("phonebook"):
         raw["phonebook"] = {normalize(str(k), cc): v for k, v in raw["phonebook"].items()}
-    for key in ("sip", "fritz", "notify"):
+    for key in ("sip", "fritz", "notify", "hybrid"):
         if raw.get(key) is None:
             raw.pop(key, None)
     if raw.get("dock_in_call", "ignore") not in ("ignore", "hangup", "handsfree"):
