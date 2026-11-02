@@ -21,7 +21,7 @@ include <omafon_masse.scad>
 use <omafon_tasten.scad>
 
 /* [Auswahl] */
-teil = "uebersicht"; // [uebersicht, schnitt, deckel, wanne, tastenplatte, akkudeckel, notrufklappe, lautstaerke_plus, lautstaerke_minus]
+teil = "uebersicht"; // [uebersicht, schnitt, deckel, wanne, tastenplatte, akkudeckel, notrufklappe, lautstaerke_plus, lautstaerke_minus, hoermuschel]
 
 /* [Aufbau] */
 deckel_h = 5;          // Höhe der Oberschale; der Rest gehört zur Wanne
@@ -67,6 +67,11 @@ akku_schrauben = [[akku_mitte[0] - 18, akku_mitte[1] - akku_oeff[1] / 2 - 3.5],
 
 // Positionen
 ohr_y = L / 2 - 16;
+// Erhabene Hörmuschel (eigenes Teil, am besten TPU): führt das Ohr, dichtet ab
+muschel_innen = 16;      // freier Schallweg (Hörerlöcher liegen innerhalb r = 5,5)
+muschel_aussen = 24;     // bleibt auf der ebenen Deckelfläche
+muschel_h = 3.5;         // über der Vorderseite
+muschel_einsatz = 1.0;   // so tief sitzt sie in der Mulde des Deckels
 led_pos = [-25, L / 2 - 14];
 gnss_pos = [22.5, L / 2 - 19];           // rechts oben unter dem Deckel (mobil/hybrid)
 mik_y = -L / 2 + 11;
@@ -108,18 +113,21 @@ module deckel() {
     difference() {
         union() {
             intersection() { schale(); zwischen(ZS, D + 1); }
-            // Hörer-, Mikrofon- und LED-Halter unter der Oberfläche
+        // Hörer-, Mikrofon- und LED-Halter unter der Oberfläche
             translate([0, ohr_y, D - W - 2.5]) ring(hoerer_d, 2.5);
             translate([0, mik_y, D - W - 2.5]) ring(mik_d, 2.5);
             translate([led_pos[0], led_pos[1], D - W - 4]) ring(led_d, 4);
             if (mobil) translate([gnss_pos[0], gnss_pos[1], D - W - 2]) linear_extrude(2)
                 difference() { square(gnss_b + 1.6, center = true); square(gnss_b, center = true); }
-            // Ohrmulde fühlbar: erhabener Ring um den Hörer
-            translate([0, ohr_y, D - 0.01]) ring(18, 0.8, 1.2);
             // Schraubdome mit Gewindeeinsatz
             for (d = dome) translate([d[0] * dom_x, d[1], ZS + 0.1]) cylinder(d = 7, h = D - W - ZS - 0.1 + 0.01);
             // Rasthaken für die Tastenplatte (oben/unten)
             for (s = [-1, 1], x = [-40, 0, 40]) rasthaken(x, fenster_y + s * (FH / 2 + kragen + 0.2), s);
+        }
+        // Ringmulde für die Hörmuschel (Vorderseite bleibt plan fürs Druckbett)
+        translate([0, ohr_y, D - muschel_einsatz]) difference() {
+            cylinder(d = muschel_aussen + 0.4, h = muschel_einsatz + 1, $fn = 64);
+            translate([0, 0, -1]) cylinder(d = muschel_innen - 0.4, h = muschel_einsatz + 3, $fn = 64);
         }
         // Tastenfenster
         translate([0, fenster_y, D - W - 1]) linear_extrude(W + 2) rrect(FB + fenster_spiel, FH + fenster_spiel, 1);
@@ -298,6 +306,18 @@ module notrufklappe() {
     }
 }
 
+module hoermuschel() {
+    // Druckrichtung: flache Unterseite aufs Bett, Rundung oben
+    r1 = muschel_innen / 2; r2 = muschel_aussen / 2; h = muschel_einsatz + muschel_h; k = 1.6;
+    rotate_extrude($fn = 64) hull() {
+        translate([r1, 0]) square([r2 - r1, 0.01]);
+        translate([r1 + k, h - k]) circle(k, $fn = 24);
+        translate([r2 - k, h - k]) circle(k, $fn = 24);
+        translate([r1, 0]) square([0.01, h - k]);
+        translate([r2 - 0.01, 0]) square([0.01, h - k]);
+    }
+}
+
 module lautstaerke(plus) {
     // Druckrichtung: Kragen unten
     difference() {
@@ -317,6 +337,7 @@ module lautstaerke(plus) {
 module zusammenbau(kappen = true) {
     color("#e8e8e8") wanne();
     color("#d0d0d0") deckel();
+    color("#222") translate([0, ohr_y, D - muschel_einsatz]) hoermuschel();
     color("#333") translate([0, fenster_y + 2.5 * RASTER, platte_z]) tastenplatte();
     color("#cc0000") notrufklappe();
     color("#bbb") akkudeckel();
@@ -339,6 +360,7 @@ module druck(name) {
     else if (name == "notrufklappe") translate([0, 0, sos_klappe / 2 - 0.2]) rotate([-90, 0, 0]) translate([0, -sos_y, 0]) notrufklappe();
     else if (name == "lautstaerke_plus") lautstaerke(true);
     else if (name == "lautstaerke_minus") lautstaerke(false);
+    else if (name == "hoermuschel") hoermuschel();
 }
 
 echo(str("Variante ", variante, ": Handteil ", B, " x ", L, " x ", D, " mm, Akku ", AK[0], " x ", AK[1], " x ", AK[2]));

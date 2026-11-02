@@ -27,7 +27,8 @@ ladeschale/mobil_hybrid/     Ladeschale passend zum 36-mm-Handteil
 
 | Datei | Stück | Farbe (Vorschlag) | Druck | Hinweise |
 |---|---|---|---|---|
-| `deckel.stl` | 1 | hellgrau/weiß | Vorderseite unten, ohne Stützen | Fenster, Hörer, LED, Mikrofon, 6 Rasthaken |
+| `deckel.stl` | 1 | hellgrau/weiß | Vorderseite unten, ohne Stützen | Fenster, Hörer mit Ringmulde, LED, Mikrofon, 6 Rasthaken |
+| `hoermuschel.stl` | 1 | **dunkel, TPU 95A** (sonst PETG) | flache Seite unten | erhabener Ring um den Hörer (3,5 mm): führt das Ohr an die richtige Stelle und dichtet ab. In die Ringmulde des Deckels kleben (TPU: Sekundenkleber mit Primer oder Kontaktkleber) |
 | `wanne.stl` | 1 | hellgrau/weiß | Rückseite unten, ohne Stützen | Notrufmulde (Brücke über 21 mm), Akkufach, Ladekontakte |
 | `tastenplatte.stl` | 1 | **schwarz** | Platte unten | dunkle Platte = Kontrast zu den weißen Kappen; **1,5 mm** an den Ausschnitten nicht verändern (Cherry-MX-Klemmmaß) |
 | `akkudeckel.stl` | 1 | wie Wanne | Außenseite unten | 2 Senkschrauben |
@@ -90,6 +91,7 @@ Elektronik siehe [festnetz-hardware.md](festnetz-hardware.md) bzw.
    Deckelfenster schieben, bis die 6 Rasthaken einrasten. Die Taststege schauen
    0,8 mm aus dem Fenster. Kappen erst ganz am Schluss aufstecken.
 3. Hörkapsel, Mikrofon (mit Dichtring/Filz) und LED in die Halter im Deckel kleben.
+   Hörmuschel außen in die Ringmulde über dem Hörer kleben.
    Mobil/Hybrid: GNSS-Antenne in den Rahmen oben rechts.
 4. **Wanne:** Notruftaster von außen in die Mulde klipsen, Notrufkappe aufstecken.
    Reedkontakt in den Kanal neben der Mulde schieben, Magnet in die Klappe kleben,
