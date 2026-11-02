@@ -77,6 +77,11 @@ jobs:
             kappe "$teil" -D "teil=\"$teil\""
           done
           render einfarbig/front -D 'teil="front"'
+          # Festnetz: Ladeschale mit Lautsprecher
+          mkdir -p "$OUT/ladeschale"
+          for teil in schale boden kontakttraeger handteil_kontakte; do
+            SCAD=cad/omafon_ladeschale.scad render "ladeschale/$teil" -D "teil=\"$teil\""
+          done
           ls -laR "$OUT"
       - uses: actions/upload-artifact@v4
         with:
