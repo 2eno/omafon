@@ -21,56 +21,97 @@ ladeschale/hybrid/           Ladeschale passend zum 36-mm-Handteil
 > (auch mit gedrückten Tasten und der Elektronik als Platzhalter), Überhänge,
 > Druckrichtung und fehlerfreies Rendern. **Gedruckt und anprobiert ist noch nichts.**
 >
-> **Reihenfolge:** 1. `pruefstueck.stl` (ca. 20 min) → Taster müssen fest
-> einrasten, Einsatz einschmelzen, Lautstärketaste probestecken. 2. Eine Tastenkappe
-> auf einen Taster. 3. Erst dann Deckel und Wanne.
+> **Reihenfolge:** erst das Prüfstück (Platte 0) und eine Tastenkappe, dann der
+> Rest – siehe [Reihenfolge](#reihenfolge).
 
-## Teileliste
+## Druckaufträge nach Einstellungen
 
-### Handteil (`gehaeuse/<variante>/`)
+Alles, was mit denselben Slicer-Einstellungen gedruckt wird, steht in einer Gruppe.
+Innerhalb einer Gruppe sind die Teile nach Farbe auf **Druckplatten** verteilt, passend
+für ein Druckbett ab 220 × 220 mm. Die STL liegen schon richtig herum; im Slicer
+nur platzieren und, wo angegeben, um die Hochachse drehen – **nie kippen**. `<v>` = `festnetz` oder `hybrid`.
 
-| Datei | Stück | Farbe (Vorschlag) | Druck | Hinweise |
+**Für alle Gruppen gilt:** keine Lochkompensation („Hole horizontal expansion“ = 0),
+die Maße enthalten das Spiel schon (Taster-Ausschnitt 14,1 mm, Teile 0,3 mm je Seite).
+Keine Stützen.
+
+### Gruppe 1 – PETG, 0,2 mm (Gehäuse und Ladeschale)
+
+| Einstellung | Wert |
+|---|---|
+| Material | PETG |
+| Schichthöhe | **0,2 mm, auch die erste Lage** (Schalterplatten = 8 Lagen à 0,2 mm; andere Schichthöhen ergeben 1,4/1,8 mm, dann halten die Taster nicht) |
+| Wände / oben / unten | 4 Wände, 5 Lagen oben, 5 Lagen unten |
+| Füllung | 25 % Gyroid |
+| Stützen / Haftung | keine / kein Brim |
+
+| Platte | Datei | Stück | Farbe | Hinweis |
 |---|---|---|---|---|
-| `pruefstueck.stl` | 1 | beliebig | flach | **zuerst drucken:** 2 Taster-Ausschnitte wie im Deckel, Dom für einen Einsatz, Loch der Lautstärketaste |
-| `deckel.stl` | 1 | **dunkelgrau/schwarz** (Kontrast zu den weißen Kappen) | Vorderseite unten, ohne Stützen, **0,2 mm Schicht** | mit eingebauter Schalterplatte: 16 Taster klipsen von vorn ein (Platte 1,6 mm = 8 Lagen à 0,2 mm). Hörer mit Ringmulde, LED-Loch, Mikrofon |
-| `hoererkopf.stl` | 1 | hell (sichtbare LED) | Oberseite unten, ohne Stützen | erhöhtes Kopfteil über den Tasten (18 mm): Ohr und Muschel liegen **gut 3 mm höher als die höchste Tastenkappe**, die Wange drückt beim Telefonieren keine Taste. Enthält Schallrohr und LED-Lichtrohr; wird auf den Deckel geklebt |
-| `hoermuschel.stl` | 1 | **dunkel, TPU 95A** (sonst PETG) | flache Seite unten | weicher Ring (3 mm) oben auf dem Hörerkopf: führt das Ohr an die richtige Stelle und dichtet ab |
-| `wanne.stl` | 1 | hellgrau/weiß | Rückseite unten, ohne Stützen, **0,2 mm Schicht** | Notrufmulde mit Schalterplatte 1,6 mm, Akkufach, Ladekontakte, Kodiernut |
-| `tastengitter.stl` | 1 | wie Deckel | flach | **optional:** 1,2 mm hohe Taststege zwischen den Tasten, auf den Deckel kleben. Niedrig genug, dass gedrückte Kappen nicht anstoßen |
-| `akkudeckel.stl` | 1 | wie Wanne | Außenseite unten | 2 Senkschrauben in 2,2 mm dicken Polstern |
-| `notrufklappe.stl` | 1 | **rot** | stehend auf der Scharnierkante, **Brim** | Noppen außen = „hier ist der Notruf“; leichte Raste seitlich, Scharnier oben – fällt in der Schale und in der Hand von selbst zu |
-| `lautstaerke_plus.stl` | 1 | dunkel | Kragen unten | erhabenes Kreuz |
-| `lautstaerke_minus.stl` | 1 | dunkel | Kragen unten | erhabener Balken |
+| **0 – zuerst** | `gehaeuse/<v>/pruefstueck.stl` | 1 | beliebig | ca. 20 min: Taster müssen fest einrasten, Einsatz einschmelzen, Lautstärketaste probestecken. Erst wenn das passt, weiterdrucken |
+| **A – dunkel** | `gehaeuse/<v>/deckel.stl` | 1 | dunkelgrau/schwarz | Kontrast zu den weißen Kappen. Schalterplatte für 16 Taster eingebaut, Hörer mit Ringmulde, LED-Loch, Mikrofon |
+| | `gehaeuse/<v>/tastengitter.stl` | 1 | wie Deckel | **optional:** 1,2 mm hohe Taststege, auf den Deckel kleben; gedrückte Kappen stoßen nicht an |
+| | `gehaeuse/<v>/lautstaerke_plus.stl` | 1 | dunkel | erhabenes Kreuz |
+| | `gehaeuse/<v>/lautstaerke_minus.stl` | 1 | dunkel | erhabener Balken |
+| **B – hell** | `gehaeuse/<v>/wanne.stl` | 1 | hellgrau/weiß | Notrufmulde mit Schalterplatte, Akkufach, Ladekontakte, Kodiernut |
+| | `gehaeuse/<v>/akkudeckel.stl` | 1 | wie Wanne | 2 Senkschrauben in 2,2-mm-Polstern |
+| | `gehaeuse/<v>/hoererkopf.stl` | 1 | hell (LED gut sichtbar) | 18 mm hohes Kopfteil: Ohr und Muschel liegen gut 3 mm höher als die höchste Taste. **Um 90° drehen** und längs neben den Akkudeckel legen (76 × 24 mm). Platte B gesamt ca. 207 mm breit |
+| **C – dunkel** | `ladeschale/<v>/schale.stl` | 1 | dunkel | Schacht, Trichter, Kodierrippe, Grill, USB-C-Halter (139 × 134 mm, Hybrid 139 × 140 mm, 58 mm hoch) |
+| | `ladeschale/<v>/kontakttraeger.stl` | 1 | beliebig | 5 Federkontakte, 2 Magnete |
+| **D** | `ladeschale/<v>/boden.stl` | 1 | beliebig | Gewichtskammer, Gummifüße (134 × 128 mm, Hybrid 134 × 134 mm) |
 
-### Tastenkappen (`tasten/`)
+### Gruppe 2 – PETG, 0,2 mm, stehend mit Brim
 
-17 Stück: Ziffern 0–9, Stern, Raute (weiß, Zeichen schwarz), Anrufen (gelb, Zeichen
-schwarz), Auflegen (schwarz, Zeichen weiß), Nachricht und Info (weiß, Zeichen
-schwarz), Notruf (rot, Noppen weiß). Druck mit 0,12–0,16 mm Schicht, Oberseite
-oben. Details und Farbwahl: Kommentar in `cad/omafon_tasten.scad`.
+Wie Gruppe 1, aber **Brim 5 mm**: Das Teil steht hochkant auf einer schmalen Kante.
 
-### Ladeschale (`ladeschale/<variante>/`)
-
-| Datei | Stück | Farbe | Druck | Hinweise |
+| Platte | Datei | Stück | Farbe | Hinweis |
 |---|---|---|---|---|
-| `schale.stl` | 1 | dunkel | Öffnung oben, ohne Stützen | Schacht, Trichter, Kodierrippe, Grill, USB-C-Halter |
-| `boden.stl` | 1 | beliebig | flach | Gewichtskammer, Gummifüße |
-| `kontakttraeger.stl` | 1 | beliebig | flach | 5 Federkontakte, 2 Magnete |
+| **E – rot** | `gehaeuse/<v>/notrufklappe.stl` | 1 | rot | Noppen außen = „hier ist der Notruf“; Raste seitlich, Scharnier oben – fällt von selbst zu |
 
+### Gruppe 3 – Tastenkappen, 0,12 mm
 
-## Druckeinstellungen
+| Einstellung | Wert |
+|---|---|
+| Material | PETG oder PLA |
+| Schichthöhe | **0,12 mm** (feine Kanten an den erhabenen Zeichen) |
+| Wände / Füllung | 3 Wände, 30 % Füllung |
+| Stützen / Haftung | keine / kein Brim; Oberseite oben |
 
-- **Material:** PETG (zäher als PLA, verträgt Wärme in der Hand und am Fenster).
-  Tastenkappen gehen auch in PLA.
-- **Bettgröße:** Handteil ist 210 mm lang. Das passt auf Drucker ab 220 × 220 mm
-  bzw. auf 250 × 210 mm längs.
-- Schicht **0,2 mm** für Deckel und Wanne (auch die erste Lage): die Schalterplatten
-  sind auf 1,6 mm = 8 Lagen ausgelegt. Andere Schichthöhen ergeben 1,4/1,8 mm, dann
-  halten die Taster nicht sicher. Ladeschale 0,2 mm, Kappen 0,12–0,16 mm.
-- Löcher nicht per Slicer-Lochkompensation aufweiten, die Maße enthalten schon Spiel
-  (Taster-Ausschnitt 14,1 mm, Teile 0,3 mm je Seite).
-- 3–4 Wände, 20–25 % Füllung (Gyroid), Ladeschale 30 %.
-- Keine Stützen außer der Brim an der Notrufklappe.
+17 Kappen: Ziffern 0–9, Stern, Raute, Nachricht, Info (weiß, Zeichen schwarz),
+Anrufen (gelb, Zeichen schwarz), Auflegen (schwarz, Zeichen weiß), Notruf (rot,
+Noppen weiß). **Erst eine Kappe drucken** und auf einen Taster stecken (Sitz:
+`stem_spiel` in `cad/omafon_tasten.scad`).
+
+| Platte | Dateien | Wann |
+|---|---|---|
+| **F – Mehrmaterial** | `tasten/zweifarbig/*_kappe.stl` + passendes `*_zeichen.stl` je Kappe als ein Objekt mit zwei Körpern laden | Drucker mit mehreren Farben (AMS, MMU, IDEX): beste Lesbarkeit |
+| **F1 – weiß** | `tasten/einfarbig/` taste_0…9, taste_stern, taste_raute, nachricht, info | Ein-Düsen-Drucker. Nachricht und Info: Farbwechsel (M600) auf Höhe der Kappenoberkante. Ziffern sitzen in einer Mulde, dort das erhabene Zeichen danach mit Lackstift schwarz einfärben |
+| **F2 – gelb** | `tasten/einfarbig/anrufen.stl` | Hörersymbol danach schwarz einfärben |
+| **F3 – schwarz** | `tasten/einfarbig/auflegen.stl` | Balken danach weiß einfärben |
+| **F4 – rot** | `tasten/einfarbig/notruf.stl` | Noppen bleiben rot (fühlbar genügt) |
+
+### Gruppe 4 – TPU 95A
+
+| Einstellung | Wert |
+|---|---|
+| Material | TPU 95A (weich); notfalls PETG wie Gruppe 1 |
+| Schichthöhe | 0,2 mm |
+| Füllung | 100 % |
+| Geschwindigkeit | langsam, 20–25 mm/s; wenig Rückzug |
+
+| Platte | Datei | Stück | Farbe | Hinweis |
+|---|---|---|---|---|
+| **G** | `gehaeuse/<v>/hoermuschel.stl` | 1 | dunkel | weicher Ring oben auf dem Hörerkopf: führt das Ohr und dichtet ab |
+
+### Reihenfolge
+
+Platte 0 (Prüfstück) und eine Kappe aus Gruppe 3 → A (Deckel) und Taster
+anprobieren → B, E, G → restliche Kappen → C, D (Ladeschale).
+
+### Allgemein
+
+- **Material:** PETG ist zäher als PLA und verträgt Wärme in der Hand und am Fenster.
+- **Bettgröße:** Deckel und Wanne sind 210 mm lang. Das passt auf Drucker ab
+  220 × 220 mm bzw. auf 250 × 210 mm längs.
 
 ## Kaufteile für die Mechanik
 
