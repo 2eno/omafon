@@ -171,6 +171,10 @@ class Modem(TelephonyBackend):
     async def call_volume(self, level: int) -> None:
         await self.cmd(f"AT+CLVL={max(0, min(5, level))}")
 
+    async def set_radio(self, on: bool) -> None:
+        """Funkteil an (CFUN=1) oder aus (CFUN=4, Flugmodus) – für den Hybrid-Sparmodus."""
+        await self.cmd(f"AT+CFUN={1 if on else 4}", timeout=15)
+
     # ------------------------------------------------------------ SMS
     async def read_sms(self, index: int) -> pdu.Deliver | None:
         lines = await self.cmd(f"AT+CMGR={index}", prefix="+CMGR")
@@ -250,6 +254,8 @@ class SimModem(TelephonyBackend):
         self.sent: list[tuple[str, str]] = []
         self._next = 0
         self.fail_alive = False
+        self.csq = 22                # simulierter Empfang (0/99 = kein Netz)
+        self.radio = True
 
     def _say(self, msg: str) -> None:
         self.log.append(msg)
@@ -260,12 +266,20 @@ class SimModem(TelephonyBackend):
         self._say("bereit")
 
     # Telefon -> Netz
-    async def dial(self, number): self._say(f"ATD{number};")
+    async def dial(self, number):
+        emergency = number in ("112", "110")       # Notruf geht auch ohne eigenes Netz
+        if not self.radio or (self.csq in (0, 99) and not emergency):
+            raise ModemError("kein Mobilfunknetz (Simulation)")
+        self._say(f"ATD{number};")
     async def answer(self): self._say("ATA")
     async def hangup(self): self._say("AT+CHUP")
     async def dtmf(self, d): self._say(f"AT+VTS={d}")
     async def call_volume(self, level): self._say(f"AT+CLVL={level}")
-    async def signal(self): return 22
+    async def signal(self): return self.csq if self.radio else None
+
+    async def set_radio(self, on: bool) -> None:
+        self.radio = on
+        self._say(f"AT+CFUN={1 if on else 4}")
     async def alive(self): return not self.fail_alive
     async def gps_position(self, timeout=30): return (49.9497, 8.5664)
     async def stored_indices(self): return sorted(self.store)
