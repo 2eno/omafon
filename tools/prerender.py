@@ -2,7 +2,8 @@
 
     sudo python3 -m tools.prerender /etc/omafon/config.yaml
 
-Nach jeder Änderung an Kontakten oder Stimme erneut ausführen.
+Nach jeder Änderung an Kontakten, Ansagen (P-Dict) oder Stimme erneut ausführen.
+Festnetz: lädt zusätzlich die Namen aus dem Fritz!Box-Telefonbuch.
 """
 import asyncio
 import sys
@@ -14,6 +15,21 @@ from omafon.numbers import DIGIT_WORDS
 from omafon.phone import P
 
 
+def load_fritz_phonebook(cfg) -> None:
+    """Festnetz: Namen aus dem Fritz!Box-Telefonbuch mit vorab sprechen."""
+    if getattr(cfg, "backend", "") != "sip" or not cfg.fritz.get("user"):
+        return
+    from omafon.fritz import FritzBox
+    f = cfg.fritz
+    try:
+        cfg.phonebook = FritzBox(f.get("host", "fritz.box"), f["user"], f.get("password", ""),
+                                 cfg.country_code, int(f.get("tam", 0)),
+                                 int(f.get("phonebook_id", 0))).phonebook()
+        print(f"Fritz!Box-Telefonbuch: {len(cfg.phonebook)} Nummern")
+    except Exception as e:  # Box nicht erreichbar: Kontakte reichen
+        print(f"Fritz!Box-Telefonbuch nicht geladen: {e!r}")
+
+
 def phrases(cfg) -> list[str]:
     out = list(DIGIT_WORDS.values()) + list(P.values())
     out += ["drei", "zwo", "eins"] + [f"Lautstärke {i}." for i in range(1, 6)]
@@ -22,11 +38,14 @@ def phrases(cfg) -> list[str]:
     for c in cfg.contacts:
         out += [f"Anruf von {c.name}.", f"Ich rufe {c.name} an.",
                 f"{c.name}. Gelbe Taste zum Anrufen.", f"Verpasster Anruf von {c.name}."]
+    for name in sorted(set(cfg.phonebook.values())):
+        out += [f"Anruf von {name}.", f"Verpasster Anruf von {name}."]
     return list(dict.fromkeys(out))
 
 
 async def main(path: str) -> None:
     cfg = config.load(path)
+    load_fritz_phonebook(cfg)
     audio = Audio(cfg)
     items = phrases(cfg)
     t0 = time.monotonic()
