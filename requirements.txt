@@ -5,3 +5,5 @@ pyserial>=3.5
 smbus2>=0.4
 gpiozero>=2.0
 vosk>=0.3.45
+# Nur Festnetz-Variante (backend: sip); baresip selbst per apt: sudo apt install baresip ffmpeg
+fritzconnection>=1.13

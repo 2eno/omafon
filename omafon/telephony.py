@@ -85,6 +85,10 @@ class TelephonyBackend:
     async def call_volume(self, level: int) -> None:
         return None
 
+    def can_send_to(self, number: str) -> bool:
+        """Kann eine Textnachricht an diese Nummer gehen?"""
+        return self.supports_sms
+
     async def send_sms(self, number: str, text: str) -> None:
         raise ModemError("Nachrichten senden wird nicht unterstützt")
 
