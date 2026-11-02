@@ -66,7 +66,7 @@ cad/omafon_tasten.scad     Tastenkappen und Tastenfront (OpenSCAD)
 cad/omafon_ladeschale.scad Ladeschale mit Lautsprecher (Festnetz)
 systemd/omafon.service
 tests/test_omafon.py       23 Tests (Kern, Mobilfunk), ohne Hardware
-tests/test_festnetz.py     29 Tests (SIP-Backend, Fritz!Box, Ladeschale), ohne Hardware
+tests/test_festnetz.py     30 Tests (SIP-Backend, Fritz!Box, Ladeschale), ohne Hardware
 docs/                      Stückliste, Verkabelung, Festnetz-Recherche und -Hardware
 ```
 

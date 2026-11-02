@@ -410,6 +410,26 @@ class FestnetzPhoneTests(Base):
         await self.sim.server.set_reachable(True)
         self.assertTrue(await self.pump_until(lambda: P["link_ok"] in self.said()))
 
+    async def test_link_lost_at_night_stays_quiet_until_key_or_morning(self):
+        self.clock = dt.datetime(2026, 11, 1, 23, 30)
+        await self.sim.server.set_reachable(False)
+        self.assertTrue(await self.until(lambda: not self.backend.online))
+        self.t += 11
+        await self.backend.check_link()
+        await self.pump()
+        self.q.put_nowait("tick")
+        await self.pump()
+        self.assertNotIn(P["link_lost"], self.said())      # nachts nicht wecken
+        await self.press("1")
+        await self.press("CALL")
+        await self.pump()
+        self.assertIn(P["link_lost"], self.said())          # aber auf Tastendruck sofort
+        self.audio.spoken.clear()
+        self.clock = dt.datetime(2026, 11, 2, 7, 1)          # Ruhezeit vorbei
+        self.q.put_nowait("tick")
+        await self.pump()
+        self.assertIn(P["link_lost"], self.said())
+
     async def test_sos_chain_ends_with_112_and_pushes_instead_of_sms(self):
         self.cfg.contacts[0].telegram_chat_id = 1     # Peter und Maria per Telegram erreichbar
         self.cfg.contacts[1].telegram_chat_id = 2

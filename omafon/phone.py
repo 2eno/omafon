@@ -621,12 +621,16 @@ class Phone:
             except (ValueError, ModemError) as e:
                 log.error("SMS %s: %s", ev.data, e)
         elif k == "link_lost":
-            self.link_reminder = self.now() + dt.timedelta(minutes=self.cfg.link_reminder_minutes)
-            if self.state not in (S.IN_CALL, S.SOS):
+            # Nachts nicht wecken: dann sagt es erst ein Tastendruck oder die
+            # Erinnerung nach der Ruhezeit (link_reminder ist dann schon fällig).
+            quiet = self.quiet_now()
+            self.link_reminder = self.now() + (dt.timedelta(0) if quiet else
+                                               dt.timedelta(minutes=self.cfg.link_reminder_minutes))
+            if self.state not in (S.IN_CALL, S.SOS) and not quiet:
                 self.speak(P["link_lost"])
         elif k == "link_ok":
             self.link_reminder = None
-            if self.state not in (S.IN_CALL, S.SOS):
+            if self.state not in (S.IN_CALL, S.SOS) and not self.quiet_now():
                 self.speak(P["link_ok"])
 
     async def on_call_gone(self, kind: str) -> None:
