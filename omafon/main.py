@@ -1,5 +1,5 @@
 """Startpunkt.  python -m omafon.main --config /etc/omafon/config.yaml
-             python -m omafon.main --config config.example.yaml --sim   (am PC testen)
+             python -m omafon.main --config config.festnetz.example.yaml --sim   (am PC testen)
 """
 from __future__ import annotations
 

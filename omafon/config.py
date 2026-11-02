@@ -27,7 +27,7 @@ class Contact:
 @dataclass
 class Config:
     owner_name: str = "Oma"
-    backend: str = "sim7600"                 # "sim7600" (Mobilfunk), "sip" (Fritz!Box), "hybrid" (beides)
+    backend: str = "sip"                     # "sip" (Fritz!Box) oder "hybrid" (Fritz!Box + Mobilfunk)
     country_code: str = "49"
     contacts: list[Contact] = field(default_factory=list)
     emergency_ring_seconds: int = 30

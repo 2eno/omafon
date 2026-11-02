@@ -28,7 +28,7 @@ IGNORED_URCS = ("+CPIN:", "SMS DONE", "PB DONE", "RDY", "+CGEV:", "+CREG:", "+CE
 
 
 class Modem(TelephonyBackend):
-    """Backend "sim7600": Mobilfunk mit SMS und GPS."""
+    """Mobilfunkteil des Hybridgeräts: SIM7600 mit SMS und GPS."""
     name = "sim7600"
     supports_sms = True
 

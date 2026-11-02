@@ -45,7 +45,7 @@ hoerer_d = 15.6;       // Hörkapsel Ø15
 mik_d = 10.2;          // Elektretkapsel Ø9,7–10
 ls_d = 28.6;           // Lautsprecher Ø28 im Handteil
 led_d = 5.2;
-gnss_b = 25.4;         // aktive GNSS-Keramikantenne 25 x 25 (mobil/hybrid)
+gnss_b = 25.4;         // aktive GNSS-Keramikantenne 25 x 25 (hybrid)
 schraube_d = 2.9;      // M2,5 durch
 einsatz_d = 3.6;       // Gewindeeinsatz M2,5 (Einschmelzmutter)
 einsatz_t = 3.8;       // kurze Einsätze (M2,5 x 3,5) – der Deckel ist nur 5 mm hoch
@@ -65,10 +65,10 @@ fenster_y = fenster_oben - FH / 2;       // Mitte des Tastenfensters
 platte_z = D - mx_platte;                // Unterkante der Schalterplatte im Deckel
 function tasten_xy() = [for (p = tastenpositionen())
     [p[0] * RASTER, fenster_y + 2.5 * RASTER + p[1] * RASTER, p[2]]];
-mobil = variante != "festnetz";
+modem = variante == "hybrid";       // SIM7600-HAT, GNSS-Antenne, größerer Akku
 
-// Akku [Breite, Länge, Dicke]: Festnetz 3000 mAh, Mobil/Hybrid 5000 mAh (Beispiel)
-AK = mobil ? [60, 70, 12] : [60, 75, 10];
+// Akku [Breite, Länge, Dicke]: Festnetz 3000 mAh, Hybrid 5000 mAh (Beispiel)
+AK = modem ? [60, 70, 12] : [60, 75, 10];
 akku_y0 = -L / 2 + kodier_nut_l + 6;     // Unterkante Akkufach, über der Kodiernut
 akku_x = -B / 2 + W + 3 + AK[0] / 2;     // links; rechts daneben Platz für Platinen
 akku_oeff = [AK[0] + 6, AK[1] + 6];
@@ -97,7 +97,7 @@ muschel_aussen = 19.6;   // bleibt auf der ebenen Kopffläche
 muschel_h = 3;           // über dem Kopf
 muschel_einsatz = 1.0;   // so tief sitzt sie in der Mulde des Kopfes
 led_pos = [-25, L / 2 - 14];
-gnss_pos = [22.5, L / 2 - 19];           // rechts oben unter dem Deckel (mobil/hybrid)
+gnss_pos = [22.5, L / 2 - 19];           // rechts oben unter dem Deckel (hybrid)
 mik_y = -L / 2 + 11;
 sos_y = L / 2 - 32;                      // Notrufmulde (Rückseite): Taster bleibt unter dem Hörerhalter frei
 sos_oeff = 21;                           // Kappe Ø19,2 geht durch
@@ -139,7 +139,7 @@ module deckel() {
             translate([0, ohr_y, D - W - 2.5]) ring(hoerer_d, 2.5);
             translate([0, mik_y, D - W - 2.5]) ring(mik_d, 2.5);
             translate([led_pos[0], led_pos[1], D - W - 4]) ring(led_d, 4);
-            if (mobil) translate([gnss_pos[0], gnss_pos[1], D - W - 2]) linear_extrude(2)
+            if (modem) translate([gnss_pos[0], gnss_pos[1], D - W - 2]) linear_extrude(2)
                 difference() { square(gnss_b + 1.6, center = true); square(gnss_b, center = true); }
             // Schraubdome mit Gewindeeinsatz
             for (d = dome) translate([d[0] * dom_x, d[1], ZS + 0.1]) cylinder(d = 7, h = D - W - ZS - 0.1 + 0.01);

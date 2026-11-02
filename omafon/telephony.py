@@ -3,8 +3,10 @@
 Phone spricht nur mit einem TelephonyBackend. Welches Backend läuft, steht in
 config.yaml unter ``backend``:
 
-  sim7600  Mobilfunk über den Waveshare-HAT (AT-Befehle, omafon/modem.py)
   sip      Festnetz über die Fritz!Box als IP-Telefon (baresip, omafon/sip.py)
+  hybrid   Fritz!Box zu Hause + Mobilfunk unterwegs (omafon/hybrid.py); der
+           Mobilfunkteil ist omafon/modem.py (SIM7600, AT-Befehle). Ein reines
+           Handy ist keine eigene Variante mehr.
 
 Ereignisse an Phone (ModemEvent.kind):
   ring        eingehender Anruf klingelt (wiederholt, solange es klingelt)
@@ -108,7 +110,7 @@ class TelephonyBackend:
         return None
 
 
-BACKENDS = ("sim7600", "sip", "hybrid")
+BACKENDS = ("sip", "hybrid")
 
 
 def create_backend(cfg, events: asyncio.Queue, loop: asyncio.AbstractEventLoop,
@@ -118,15 +120,9 @@ def create_backend(cfg, events: asyncio.Queue, loop: asyncio.AbstractEventLoop,
     Rückgabe: (backend, simulator_steuerung). Die Steuerung hat inject_call,
     inject_sms und inject – für die Simulator-Konsole und Tests.
     """
-    kind = getattr(cfg, "backend", "sim7600")
+    kind = getattr(cfg, "backend", "sip")
     if kind not in BACKENDS:
         raise ValueError(f"Unbekanntes backend '{kind}' – erlaubt: {', '.join(BACKENDS)}")
-    if kind == "sim7600":
-        from .modem import Modem, SimModem
-        if sim:
-            m = SimModem(events)
-            return m, m
-        return Modem(cfg.serial_port, cfg.serial_baud, events, loop), None
     if kind == "hybrid":
         from .hybrid import HybridBackend
         if sim:

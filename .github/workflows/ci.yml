@@ -76,9 +76,9 @@ jobs:
           for teil in anrufen auflegen nachricht info notruf; do
             kappe "$teil" -D "teil=\"$teil\""
           done
-          # Gehäuse und Ladeschale je Variante (mobil = hybrid: gleiche Maße)
+          # Gehäuse und Ladeschale je Variante
           for v in festnetz hybrid; do
-            dir=$([ "$v" = festnetz ] && echo festnetz || echo mobil_hybrid)
+            dir=$v
             for teil in pruefstueck deckel wanne tastengitter akkudeckel notrufklappe lautstaerke_plus lautstaerke_minus hoererkopf hoermuschel; do
               SCAD=cad/omafon_gehaeuse.scad render "gehaeuse/$dir/$teil" -D "variante=\"$v\"" -D "teil=\"$teil\""
             done

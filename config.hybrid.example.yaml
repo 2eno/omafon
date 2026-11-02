@@ -68,6 +68,7 @@ contacts:
     spoken: [enkel]
     speed_dial: 3
     emergency: 3
+    admin: true                # darf per SMS "STATUS" den Zustand abfragen (nur Hybrid)
   - name: Doktor Weber
     number: "06990009123"      # fiktiv (BNetzA-Bereich für Medien)
     spoken: [doktor, arzt, weber]

@@ -3,13 +3,14 @@
 // Schale weiter zusammen. Variante per -D 'variante="hybrid"' wählen.
 
 /* [Variante] */
-variante = "festnetz"; // [festnetz, mobil, hybrid]
+variante = "festnetz"; // [festnetz, hybrid]
+// Prüfung steht unten (nach allen Zuweisungen), damit -D 'variante=…' greift.
 
 // Außenmaße des Handteils (ohne Tastenkappen). Die Breite/Länge folgen aus der
 // Tastenfront (3 x 24 mm Raster + Rand = 84 x 156 mm) plus Rahmen.
 gehaeuse_breite = 94;
 gehaeuse_laenge = 210;
-// Festnetz ohne Modem ist dünner; Mobil/Hybrid tragen den SIM7600-HAT auf dem Pi.
+// Festnetz ohne Modem ist dünner; Hybrid trägt den SIM7600-HAT auf dem Pi.
 function dicke_fuer(v) = v == "festnetz" ? 30 : 36;
 gehaeuse_dicke = dicke_fuer(variante);
 gehaeuse_eck_r = 10;     // Ecken in der Draufsicht
@@ -28,3 +29,6 @@ function magnet_x() = (kontakt_pins * kontakt_raster + 6 - 0.4) / 2 + 1;
 kodier_b = 6;
 kodier_t = 2.5;
 kodier_nut_l = 40;       // Nutlänge am Handteil ab Unterkante
+
+assert(variante == "festnetz" || variante == "hybrid",
+       str("variante muss \"festnetz\" oder \"hybrid\" sein (das reine Handy gibt es nicht mehr), nicht \"", variante, "\""));
