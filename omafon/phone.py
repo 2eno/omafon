@@ -78,6 +78,13 @@ P = {
     "sos_nobody": "Ich habe niemanden erreicht. Alle Notfallkontakte haben eine SMS bekommen.",
     "modem_restart": "Das Mobilfunkteil startet neu. Bitte einen Moment warten.",
     "modem_dead": "Achtung, Telefonieren ist gerade nicht möglich.",
+    # Festnetz (backend: sip)
+    "link_lost": "Keine Verbindung zur Fritzbox. Ich versuche es weiter.",
+    "link_ok": "Verbindung zur Fritzbox ist wieder da.",
+    "voicemail": "Nachricht auf dem Anrufbeantworter.",
+    "voicemail_unplayable": "Nachricht auf dem Anrufbeantworter. Abspielen geht leider nicht.",
+    "no_sending": "Nachrichten verschicken ist bei diesem Telefon nicht eingerichtet.",
+    "no_sending_to": "An diese Person kann ich keine Nachricht schicken.",
 }
 
 
@@ -120,6 +127,7 @@ class Phone:
         self.battery_warned: set[int] = set()
         self.modem_failures = 0
         self.ticks = 0
+        self.link_reminder: dt.datetime | None = None    # Verbindung weg: nächste Erinnerung
 
     # ================================================================ Grundlagen
     def _load(self, name, default):
@@ -221,7 +229,7 @@ class Phone:
         if k in ("SOS", "SOS_COVER"):
             return self.on_sos_key(k, kind)
         if k == "CHARGER":
-            return self.on_charger(kind)
+            return await self.on_charger(kind)
         if k in DIGITS and kind == "down" and self.state in (
                 S.IDLE, S.ENTRY, S.IN_CALL, S.OUTGOING, S.VOICE_DIAL, S.READING):
             self.speak(DIGIT_WORDS[k])
@@ -374,8 +382,22 @@ class Phone:
             self.speak(f"Lautstärke {level}.")
 
     # ---------------------------------------------------------------- Ladeschale
-    def on_charger(self, kind: str) -> None:
+    async def on_charger(self, kind: str) -> None:
         if kind not in ("down", "up"):
+            return
+        if self.state == S.RINGING and kind == "up" and self.cfg.answer_on_lift:
+            return await self.answer()                # Abheben = Annehmen
+        if self.state in (S.IN_CALL, S.OUTGOING) and self.call:
+            if kind == "down" and self.cfg.dock_in_call == "hangup":
+                return await self.end_call(P["hung_up"])    # Einstellen = Auflegen
+            if kind == "down" and self.cfg.dock_in_call == "handsfree":
+                self.call.speaker = True
+                self.audio.route("speaker")
+                return self.speak(P["speaker_on"])
+            if kind == "up" and self.call.speaker and self.cfg.dock_speaker:
+                self.call.speaker = False
+                self.audio.route("earpiece")
+                return self.speak(P["speaker_off"])
             return
         b = self.hw.battery_percent()
         pct = f" Akku {b} Prozent." if b is not None else ""
@@ -420,6 +442,8 @@ class Phone:
         await self.audio.say(P["sos_start"])
         await asyncio.sleep(self.cfg.sos_cancel_window_s)
         await self.audio.say(P["sos_running"])
+        if not self.modem.online:                     # trotzdem versuchen – vielleicht gleich wieder da
+            await self.audio.say(P["link_lost"])
         self.bg(self.sos_sms())            # läuft unabhängig weiter
         chain = self.cfg.emergency_chain()
         targets = [(c.name, c.number) for c in chain] or [("den Notruf", "112")]
@@ -464,7 +488,12 @@ class Phone:
         return bool(self.callback_until and self.now() < self.callback_until)
 
     # ================================================================ Anrufe
+    def docked_speaker(self) -> bool:
+        """Steht das Telefon in der Ladeschale mit Lautsprecher -> freisprechen."""
+        return bool(self.cfg.dock_speaker and self.hw.on_charger())
+
     async def place_call(self, number: str, speaker: bool = False) -> Call:
+        speaker = speaker or self.docked_speaker()
         self.call = Call(number, incoming=False, speaker=speaker)
         self.audio.route("speaker" if speaker or self.cfg.default_route == "speaker" else "earpiece")
         try:
@@ -487,6 +516,9 @@ class Phone:
         number = number.strip()
         if not number:
             return
+        if not self.modem.online:
+            self.go_idle()
+            return await self.audio.say(P["link_lost"])
         name = self.cfg.name_for(number)
         self.state = S.OUTGOING
         await self.audio.say(f"Ich rufe {name} an." if name else
@@ -506,6 +538,7 @@ class Phone:
             log.error("Annehmen: %s", e)
         if self.call:
             self.call.answered.set()
+            self.call.speaker = self.call.speaker or self.docked_speaker()
             self.audio.route("speaker" if self.call.speaker else
                              ("speaker" if self.cfg.default_route == "speaker" else "earpiece"))
         if self.state != S.SOS:
@@ -587,6 +620,14 @@ class Phone:
                 await self.on_sms(int(ev.data))
             except (ValueError, ModemError) as e:
                 log.error("SMS %s: %s", ev.data, e)
+        elif k == "link_lost":
+            self.link_reminder = self.now() + dt.timedelta(minutes=self.cfg.link_reminder_minutes)
+            if self.state not in (S.IN_CALL, S.SOS):
+                self.speak(P["link_lost"])
+        elif k == "link_ok":
+            self.link_reminder = None
+            if self.state not in (S.IN_CALL, S.SOS):
+                self.speak(P["link_ok"])
 
     async def on_call_gone(self, kind: str) -> None:
         call = self.call
@@ -626,15 +667,24 @@ class Phone:
                 return                                  # auf weitere Teile warten
             del self.partial[key]
             text = "".join(entry["parts"][i] for i in sorted(entry["parts"]))
-        await self.store_sms(d.sender, text, d.timestamp, announce)
+        audio = getattr(d, "audio", None)            # Anrufbeantworter: Pfad oder ""
+        if audio is not None:
+            text = P["voicemail"] if audio else P["voicemail_unplayable"]
+        await self.store_sms(d.sender, text, d.timestamp, announce, audio=audio or "")
 
-    async def store_sms(self, sender: str, text: str, ts, announce: bool = True) -> None:
+    async def store_sms(self, sender: str, text: str, ts, announce: bool = True,
+                        audio: str = "") -> None:
         c = self.cfg.by_number(sender)
-        if c and c.admin and text.strip().upper() == "STATUS":
+        if not audio and c and c.admin and text.strip().upper() == "STATUS":
             return await self.send_status(sender)
         msg = {"sender": sender, "text": text.strip(),
                "time": (ts or self.now()).isoformat(timespec="minutes"), "read": False}
+        if audio:
+            msg["audio"] = audio
         self.inbox.insert(0, msg)
+        for old in self.inbox[50:]:                     # alte Aufnahmen mit löschen
+            if old.get("audio"):
+                Path(old["audio"]).unlink(missing_ok=True)
         del self.inbox[50:]
         self._save("inbox.json", self.inbox)
         if not announce:
@@ -721,6 +771,8 @@ class Phone:
         head = (f"{intro} Von {who}, {when}." if intro else
                 f"{'Neue ' if new else ''}Nachricht von {who}, {when}.")
         await self.audio.say(f"{head} {m['text']}")
+        if m.get("audio"):
+            await self.audio.play(Path(m["audio"]), interrupt=False)
         await asyncio.sleep(0.4)
         await self.audio.say(P["read_hint"])
 
@@ -745,6 +797,9 @@ class Phone:
             self.go_idle()
 
     async def dictate_job(self, to: str | None) -> None:
+        if not self.modem.supports_sms:
+            self.go_idle()
+            return await self.audio.say(P["no_sending"])
         self.state = S.DICTATE
         self.audio.route("speaker")
         if to is None:
@@ -755,6 +810,9 @@ class Phone:
                 self.go_idle()
                 return await self.audio.say(P["not_understood"])
             to = c.number
+        if not self.modem.can_send_to(to):
+            self.go_idle()
+            return await self.audio.say(P["no_sending_to"])
         self.draft_to = to
         await self.audio.say(f"Nachricht an {self.name_or_number(to)}. {P['speak_now']}")
         await self.audio.tone("record")
@@ -785,7 +843,7 @@ class Phone:
         b = self.hw.battery_percent()
         if b is not None:
             parts.append(f"Akku {b} Prozent{', lädt' if self.hw.on_charger() else ''}.")
-        parts.append(signal_words(await self.modem.signal()))
+        parts.append(self.modem.status_words() or signal_words(await self.modem.signal()))
         if self.missed:
             names = [self.name_or_number(m["number"]) for m in self.missed[-3:]]
             parts.append(count_words(len(self.missed), "Ein verpasster Anruf", "verpasste Anrufe", "")
@@ -818,6 +876,12 @@ class Phone:
                 await self.store_sms(entry["d"].sender, text, entry["d"].timestamp)
         await self.signal_news()
         self.update_news_led()
+        if self.link_reminder and now >= self.link_reminder:
+            if self.modem.online:
+                self.link_reminder = None
+            elif self.state == S.IDLE and not self.quiet_now() and not (self.job and not self.job.done()):
+                self.speak(P["link_lost"])
+                self.link_reminder = now + dt.timedelta(minutes=self.cfg.link_reminder_minutes)
         if self.ticks % 60 == 0:
             await self.check_battery()
             await self.check_modem()

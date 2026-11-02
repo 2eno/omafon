@@ -17,6 +17,8 @@ class Contact:
     emergency: int | None = None    # Reihenfolge in der Notrufkette (1 = zuerst)
     spoken: list[str] = field(default_factory=list)  # Wörter für die Spracherkennung
     admin: bool = False             # darf Status-SMS anfordern
+    telegram_chat_id: int | str | None = None   # Festnetz: Notruf/Nachrichten per Telegram
+    email: str | None = None                    # Festnetz: Notruf/Nachrichten per E-Mail
 
     def words(self) -> list[str]:
         return [w.lower() for w in (self.spoken or [self.name])]
@@ -56,6 +58,17 @@ class Config:
     serial_port: str = "/dev/ttyAMA0"
     serial_baud: int = 115200
     data_dir: str = "/data/omafon"
+    # Festnetz (backend: sip) – Schlüssel siehe omafon/sip.py, fritz.py, notify.py
+    sip: dict = field(default_factory=dict)
+    fritz: dict = field(default_factory=dict)
+    notify: dict = field(default_factory=dict)
+    phonebook: dict = field(default_factory=dict)   # Nummer -> Name (wird aus der Fritz!Box geladen)
+    home_position: list[float] | None = None        # [Breite, Länge] für den Notruf-Hinweis, optional
+    link_reminder_minutes: int = 10                  # Verbindung weg: Ansage wiederholen
+    # Ladeschale
+    answer_on_lift: bool = False             # Abheben aus der Schale nimmt den Anruf an
+    dock_in_call: str = "ignore"             # Einstellen im Gespräch: ignore | hangup | handsfree
+    dock_speaker: bool = False               # Schale hat Lautsprecher: dort freisprechen
 
     # ---- Abfragen
     def by_number(self, number: str) -> Contact | None:
@@ -79,8 +92,13 @@ class Config:
         return sorted((c for c in self.contacts if c.emergency), key=lambda c: c.emergency)
 
     def name_for(self, number: str) -> str | None:
+        """Name aus den Kontakten, sonst aus dem Fritz!Box-Telefonbuch."""
         c = self.by_number(number)
-        return c.name if c else None
+        if c:
+            return c.name
+        if self.phonebook and number:
+            return self.phonebook.get(normalize(number, self.country_code))
+        return None
 
 
 def load(path: str | Path) -> Config:
@@ -88,6 +106,14 @@ def load(path: str | Path) -> Config:
     contacts = [Contact(**c) for c in raw.pop("contacts", [])]
     if "quiet_hours" in raw:
         raw["quiet_hours"] = tuple(raw["quiet_hours"])
+    cc = str(raw.get("country_code", "49"))
+    if raw.get("phonebook"):
+        raw["phonebook"] = {normalize(str(k), cc): v for k, v in raw["phonebook"].items()}
+    for key in ("sip", "fritz", "notify"):
+        if raw.get(key) is None:
+            raw.pop(key, None)
+    if raw.get("dock_in_call", "ignore") not in ("ignore", "hangup", "handsfree"):
+        raise ValueError(f"dock_in_call muss ignore, hangup oder handsfree sein ({path})")
     known = Config.__dataclass_fields__
     unknown = set(raw) - set(known)
     if unknown:

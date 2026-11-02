@@ -211,6 +211,12 @@ class SimAudio(Audio):
     async def stop(self) -> None:
         pass
 
+    async def play(self, path, interrupt: bool = True) -> None:
+        self.spoken.append(f"<abspielen {Path(path).name}>")
+        if self.echo:
+            print(f"  [SPIELT] {path}", flush=True)
+        await asyncio.sleep(0)
+
     def _apply(self) -> None:
         if self.echo:
             print(f"  [AUDIO] Weg={self.route_mode} Lautstärke={self.volume}", flush=True)
