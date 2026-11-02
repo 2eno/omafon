@@ -238,6 +238,10 @@ POS = [ // [x, y, art]
 front_b = 3 * raster + 2 * rand;
 front_h = 6 * raster + 2 * rand;
 
+// Für andere Dateien (use <omafon_tasten.scad>): Maße und Tastenpositionen
+function tastenfront_mass() = [front_b, front_h, raster, platte, steg_h];
+function tastenpositionen() = POS;
+
 module front() {
     difference() {
         union() {
