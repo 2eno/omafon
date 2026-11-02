@@ -85,6 +85,11 @@ P = {
     "voicemail_unplayable": "Nachricht auf dem Anrufbeantworter. Abspielen geht leider nicht.",
     "no_sending": "Nachrichten verschicken ist bei diesem Telefon nicht eingerichtet.",
     "no_sending_to": "An diese Person kann ich keine Nachricht schicken.",
+    # Hybrid (backend: hybrid)
+    "no_network": "Kein Netz. Telefonieren geht gerade nicht. Ich versuche es weiter.",
+    "network_ok": "Telefonieren geht wieder.",
+    "mode_home": "Zu Hause. Telefon über die Fritzbox.",
+    "mode_mobile": "Unterwegs. Telefon über Mobilfunk.",
 }
 
 
@@ -443,7 +448,7 @@ class Phone:
         await asyncio.sleep(self.cfg.sos_cancel_window_s)
         await self.audio.say(P["sos_running"])
         if not self.modem.online:                     # trotzdem versuchen – vielleicht gleich wieder da
-            await self.audio.say(P["link_lost"])
+            await self.audio.say(self.offline_phrase())
         self.bg(self.sos_sms())            # läuft unabhängig weiter
         chain = self.cfg.emergency_chain()
         targets = [(c.name, c.number) for c in chain] or [("den Notruf", "112")]
@@ -488,6 +493,10 @@ class Phone:
         return bool(self.callback_until and self.now() < self.callback_until)
 
     # ================================================================ Anrufe
+    def offline_phrase(self) -> str:
+        """Ansage 'kein Netz' – der Text kommt aus P, das Backend wählt den Schlüssel."""
+        return P.get(getattr(self.modem, "offline_key", "link_lost"), P["link_lost"])
+
     def docked_speaker(self) -> bool:
         """Steht das Telefon in der Ladeschale mit Lautsprecher -> freisprechen."""
         return bool(self.cfg.dock_speaker and self.hw.on_charger())
@@ -518,7 +527,7 @@ class Phone:
             return
         if not self.modem.online:
             self.go_idle()
-            return await self.audio.say(P["link_lost"])
+            return await self.audio.say(self.offline_phrase())
         name = self.cfg.name_for(number)
         self.state = S.OUTGOING
         await self.audio.say(f"Ich rufe {name} an." if name else
@@ -627,11 +636,12 @@ class Phone:
             self.link_reminder = self.now() + (dt.timedelta(0) if quiet else
                                                dt.timedelta(minutes=self.cfg.link_reminder_minutes))
             if self.state not in (S.IN_CALL, S.SOS) and not quiet:
-                self.speak(P["link_lost"])
+                self.speak(P.get(ev.data, self.offline_phrase()))
         elif k == "link_ok":
+            # data = P-Schlüssel (z. B. network_ok, mode_home); leer = link_ok
             self.link_reminder = None
             if self.state not in (S.IN_CALL, S.SOS) and not self.quiet_now():
-                self.speak(P["link_ok"])
+                self.speak(P.get(ev.data, P["link_ok"]))
 
     async def on_call_gone(self, kind: str) -> None:
         call = self.call
@@ -884,7 +894,7 @@ class Phone:
             if self.modem.online:
                 self.link_reminder = None
             elif self.state == S.IDLE and not self.quiet_now() and not (self.job and not self.job.done()):
-                self.speak(P["link_lost"])
+                self.speak(self.offline_phrase())
                 self.link_reminder = now + dt.timedelta(minutes=self.cfg.link_reminder_minutes)
         if self.ticks % 60 == 0:
             await self.check_battery()
