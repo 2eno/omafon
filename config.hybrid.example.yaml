@@ -1,0 +1,113 @@
+# Omafon – Beispielkonfiguration HYBRID: zu Hause Fritz!Box (WLAN/SIP),
+# unterwegs Mobilfunk (SIM7600). Kopieren nach /etc/omafon/config.yaml und
+# Platzhalter ersetzen. Bedienung und Begründungen: docs/hybrid.md
+# Echte Kennwörter NIE ins Repository – config.yaml steht in .gitignore.
+backend: hybrid
+
+hybrid:
+  prefer: home                 # normale Anrufe zu Hause über die Fritz!Box (Festnetznummer)
+  emergency_prefer: home       # 112 zu Hause über Festnetz: Anschlussadresse geht mit
+  home_modem: "on"             # on = Handynummer auch zu Hause erreichbar
+                               # "off" = Sparmodus: Mobilfunk ruht, solange die Fritz!Box
+                               #       stabil ist (Rufumleitung "bei nicht erreichbar"
+                               #       auf die Festnetznummer beim Anbieter einrichten!)
+  radio_off_after_s: 300
+  announce_mode: false         # true: "Zu Hause …" / "Unterwegs …" beim Wechsel ansagen
+  no_network_grace_s: 10
+owner_name: Oma Erika
+
+sip:
+  registrar: fritz.box
+  # Fritz!Box: Telefonie → Telefoniegeräte → Neues Gerät → Telefon → LAN/WLAN (IP-Telefon).
+  # Benutzername und Kennwort von dort hier eintragen.
+  user: "omafon-ip"
+  password: "PLATZHALTER_SIP_KENNWORT"
+  regint: 300
+  link_grace_s: 10             # so lange darf die Verbindung weg sein, bevor es angesagt wird
+  wifi_iface: wlan0
+
+fritz:
+  host: fritz.box
+  # Eigener Fritz!Box-Benutzer (System → FRITZ!Box-Benutzer) nur mit dem Recht
+  # "Sprachnachrichten, Faxnachrichten, FRITZ!App Fon und Anrufliste".
+  user: "omafon"
+  password: "PLATZHALTER_FRITZ_KENNWORT"
+  tam: 0                       # erster Anrufbeantworter
+  phonebook_id: 0              # erstes Telefonbuch
+  tam_poll_s: 60
+  tam_after_fetch: mark        # mark | delete | keep
+
+notify:                        # nur wenn Mobilfunk fehlt: Push statt SMS – optional
+  enabled: false
+  telegram_token: null         # "123456:ABC…" vom @BotFather
+  smtp_host: null              # z. B. smtp.example.org
+  smtp_port: 587
+  smtp_user: null
+  smtp_password: null
+  smtp_from: null
+
+home_position: null            # z. B. [50.1109, 8.6821] – dann steht ein Kartenlink im Notruf-Hinweis
+
+contacts:
+  - name: Peter
+    number: "+491711234567"
+    spoken: [peter, sohn]
+    speed_dial: 1
+    emergency: 1
+    telegram_chat_id: null     # Chat-ID, nachdem Peter dem Bot geschrieben hat
+    email: peter@example.org
+  - name: Maria
+    number: "+491609876543"
+    spoken: [maria, tochter]
+    speed_dial: 2
+    emergency: 2
+    telegram_chat_id: null
+  - name: der Enkel
+    number: "+491525550000"
+    spoken: [enkel]
+    speed_dial: 3
+    emergency: 3
+  - name: Doktor Weber
+    number: "06990009123"      # fiktiv (BNetzA-Bereich für Medien)
+    spoken: [doktor, arzt, weber]
+    speed_dial: 9
+  - name: den Notruf           # immer zuletzt in der Kette
+    number: "112"
+    spoken: [notruf]
+    emergency: 9
+
+emergency_ring_seconds: 30
+emergency_rounds: 2
+emergency_callback_minutes: 30
+quiet_hours: [22, 7]
+news_signal_minutes: 10
+news_led: true
+link_reminder_minutes: 10      # Verbindung weg: Ansage alle 10 min wiederholen
+
+# Ladeschale mit Lautsprecher
+answer_on_lift: true           # Abheben nimmt an
+dock_in_call: hangup           # Einstellen legt auf (wie ein klassischer Hörer); handsfree = Freisprechen
+dock_speaker: true             # in der Schale über deren Lautsprecher sprechen und klingeln
+
+default_route: earpiece
+volume: 4
+entry_timeout_s: 20
+long_press_s: 1.2
+sos_hold_s: 3.0
+sos_cancel_window_s: 5
+
+audio_device: "plughw:CARD=Device,DEV=0"
+mic_device: "plughw:CARD=Device,DEV=0"
+cache_dir: /var/cache/omafon
+piper_bin: /opt/omafon/piper/piper
+piper_model: /opt/omafon/voices/de_DE-thorsten-medium.onnx
+speech_rate: 1.2
+
+vosk_model: /opt/omafon/vosk-model-small-de-0.15
+remote_stt_url: null
+dictation_silence_s: 2.5
+dictation_max_s: 40
+
+serial_port: /dev/ttyAMA0      # SIM7600-HAT
+serial_baud: 115200
+data_dir: /data/omafon
