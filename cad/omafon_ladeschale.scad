@@ -15,23 +15,22 @@
 //
 // Druck: PETG, 0,2 mm, 3 Wände. Schale mit der Öffnung nach oben, ohne Stützen.
 
+include <omafon_masse.scad>   // Handteil-Maße, Kontakte, Kodierung (gemeinsam mit dem Gehäuse)
+
 /* [Auswahl] */
 teil = "uebersicht"; // [uebersicht, schale, boden, kontakttraeger, handteil_kontakte]
 
 /* [Handteil] – an das echte Gehäuse anpassen */
-hand_b = 62;         // Breite des Telefons
-hand_t = 26;         // Dicke
-hand_r = 6;          // Eckenradius
+hand_b = gehaeuse_breite;   // Breite des Telefons (aus omafon_masse.scad)
+hand_t = gehaeuse_dicke;    // Dicke je Variante
+hand_r = gehaeuse_kante_r;  // Rundung im Querschnitt
 spiel = 1.2;         // Luft rundherum
 neigung = 15;        // Telefon lehnt nach hinten (Grad)
 trichter = 7;        // Einführschräge oben je Seite – findet man blind
 trichter_h = 10;     // Höhe der Einführschräge
-kodier_b = 6;        // Kodierrippe hinten (Handteil braucht passende Nut)
-kodier_t = 2.5;
+// Kodierrippe hinten: kodier_b x kodier_t aus omafon_masse.scad (Nut im Handteil)
 
 /* [Gehäuse] */
-breite = 120;
-tiefe = 135;
 hoehe_vorn = 48;     // Einstecktiefe ergibt sich daraus (Echo in der Konsole)
 wand = 2.4;
 eck_r = 12;
@@ -42,12 +41,11 @@ ls_tiefe = 16;       // Höhe der Schallführung unter dem Deckel
 ls_loch = 3;         // Grilllöcher
 
 /* [Kontakte] */
-pins = 5;
-pin_raster = 5.0;
+pins = kontakt_pins;
+pin_raster = kontakt_raster;
 pin_d = 2.05;        // Bohrung für Federkontakt Ø2 mm (Presspassung)
-pad_d = 5.0;         // Kontaktfläche am Handteil (Messingscheibe/Leiterplatte)
-magnet_d = 8.2;      // 2 Magnete 8 x 3 mm hinter den Kontakten
-magnet_h = 3.2;
+pad_d = kontakt_pad_d;
+// Magnete magnet_d x magnet_h aus omafon_masse.scad
 
 /* [Anschluss] */
 usbc_b = 13;         // USB-C-Buchsenplatine (Breakout)
@@ -56,6 +54,11 @@ usbc_h = 7;
 /* [Boden] */
 boden_h = 4;
 gewicht_h = 10;      // Kammer für Stahlscheiben (Standfestigkeit)
+
+// Grundfläche wächst mit dem Handteil (Schacht + Trichter + Wände + Rand / Lautsprecher dahinter)
+breite = hand_b + 2 * spiel + 2 * trichter + 2 * wand + 24;
+tiefe = 18 + (hand_t + 2 * spiel) + trichter + 3 * wand
+        + (hoehe_vorn + 10 - (boden_h + 6)) * tan(neigung) + ls_d + 6;
 
 $fn = 64;
 
@@ -211,5 +214,5 @@ else {
     color("gold") translate([schacht_x, schacht_y, schacht_boden - 6]) rotate([-neigung, 0, 0]) kontakttraeger();
     // Telefon angedeutet
     color("white", 0.6) translate([schacht_x, schacht_y, schacht_boden]) rotate([-neigung, 0, 0])
-        linear_extrude(140) rrect(hand_b, hand_t, hand_r);
+        linear_extrude(gehaeuse_laenge) rrect(hand_b, hand_t, hand_r);
 }
