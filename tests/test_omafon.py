@@ -16,7 +16,8 @@ from omafon.numbers import normalize, spoken_number
 from omafon.phone import P, S, Phone
 from omafon.stt import SimRecognizer
 
-CFG = Path(__file__).resolve().parents[1] / "config.example.yaml"
+# Kernlogik mit dem SIM7600-Simulator (Mobilfunkteil des Hybridgeräts)
+CFG = Path(__file__).resolve().parents[1] / "config.hybrid.example.yaml"
 
 
 class PduTests(unittest.TestCase):
@@ -92,6 +93,26 @@ class KeyTrackerTests(unittest.TestCase):
         kt.update("CALL", False, 4.0)
         kt.update("CALL", False, 4.1)
         self.assertEqual([e.kind for e in evs], ["down", "long", "up"])
+
+
+class WiringDocTests(unittest.TestCase):
+    """docs/verkabelung.md muss zur Pinbelegung in hardware.py passen."""
+
+    def test_pinout_matches_code(self):
+        import re
+        from omafon import hardware as h
+        doc = (Path(__file__).resolve().parents[1] / "docs" / "verkabelung.md").read_text(encoding="utf-8")
+        names = {"*": "* (Stern)", "#": "# (Raute)", "CALL": "Anrufen (gelb)",
+                 "HANGUP": "Auflegen (schwarz)", "MSG": "Nachricht", "INFO": "Info"}
+        for bit, key in enumerate(h.MCP_KEYS):
+            pin = ("GPA" if bit < 8 else "GPB") + str(bit % 8)
+            self.assertRegex(doc, rf"\| {pin} \| {bit} \| {re.escape(names.get(key, key))} \|")
+        labels = {"SOS": "SOS-Taster", "SOS_COVER": "Notrufklappe", "VOL_UP": "Lauter",
+                  "VOL_DOWN": "Leiser", "CHARGER": "In der Schale"}
+        for pin, key, _inv in h.PI_INPUTS:
+            self.assertRegex(doc, rf"\| {pin} \| {re.escape(labels[key])} \|")
+        for pin, label in ((h.PIN_VIBRA, "Vibration"), (h.PIN_LED, "LED"), (h.PIN_MODEM_PWR, "Modem PWRKEY")):
+            self.assertRegex(doc, rf"\| {pin} \| {label}")
 
 
 class PhoneTests(unittest.IsolatedAsyncioTestCase):
