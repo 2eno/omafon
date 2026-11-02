@@ -75,8 +75,8 @@ class HybridTests(unittest.IsolatedAsyncioTestCase):
             await self.pump(1)
         return False
 
-    async def press(self, key, long=False):
-        self.hw.press(key, long)
+    async def press(self, key, long=False, held=0.1):
+        self.hw.press(key, long, held)
         await self.pump()
 
     async def dial(self, number):

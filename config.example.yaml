@@ -42,6 +42,7 @@ default_route: earpiece        # earpiece = am Ohr, speaker = immer Freisprechen
 volume: 4                      # 1..5
 entry_timeout_s: 20
 long_press_s: 1.2
+hangup_hold_s: 0.5            # im Gespräch Auflegetaste so lange halten (Wange am Ohr streift sie sonst); 0 = sofort
 sos_hold_s: 3.0
 sos_cancel_window_s: 5
 

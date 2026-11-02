@@ -133,8 +133,8 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
     def said(self):
         return " | ".join(self.audio.spoken)
 
-    async def press(self, key, long=False):
-        self.hw.press(key, long)
+    async def press(self, key, long=False, held=0.1):
+        self.hw.press(key, long, held)
         await self.pump()
 
     async def test_digits_are_echoed_and_dialed(self):
@@ -149,9 +149,31 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
         self.modem.inject("call_begin")
         await self.pump()
         self.assertEqual(self.phone.state, S.IN_CALL)
-        await self.press("HANGUP")
+        await self.press("HANGUP", held=0.6)               # bewusst gehalten
         self.assertEqual(self.phone.state, S.IDLE)
         self.assertIn("Aufgelegt.", self.said())
+
+    async def test_brief_hangup_in_call_is_ignored(self):
+        self.modem.inject_call("+491711234567")
+        await self.pump()
+        await self.press("CALL")
+        self.assertEqual(self.phone.state, S.IN_CALL)
+        await self.press("HANGUP", held=0.1)               # Wange streift die Taste
+        await self.press("HANGUP", held=0.2)
+        self.assertEqual(self.phone.state, S.IN_CALL)
+        self.assertEqual(self.said().count(P["hangup_hold"]), 1)   # Hinweis nur einmal
+        self.assertNotIn("AT+CHUP", self.modem.log)
+        await self.press("HANGUP", long=True)              # lang gedrückt: aufgelegt
+        self.assertEqual(self.phone.state, S.IDLE)
+        self.assertIn("AT+CHUP", self.modem.log)
+
+    async def test_hangup_hold_can_be_switched_off(self):
+        self.cfg.hangup_hold_s = 0
+        self.modem.inject_call("+491711234567")
+        await self.pump()
+        await self.press("CALL")
+        await self.press("HANGUP", held=0.05)
+        self.assertEqual(self.phone.state, S.IDLE)
 
     async def test_backspace_and_timeout(self):
         await self.press("4")

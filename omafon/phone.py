@@ -65,6 +65,7 @@ P = {
     "no_more": "Keine weiteren Nachrichten.",
     "read_hint": "Taste Nachricht: nächste. Info: wiederholen. Gelbe Taste: zurückrufen.",
     "reading_end": "Nachrichten beendet.",
+    "hangup_hold": "Zum Auflegen die schwarze Taste etwas länger drücken.",
     "speaker_on": "Lautsprecher an.",
     "speaker_off": "Lautsprecher aus.",
     "unknown_caller": "Anruf von einer unbekannten Nummer.",
@@ -101,6 +102,7 @@ class Call:
     ended: asyncio.Event = field(default_factory=asyncio.Event)
     speaker: bool = False
     reason: str = ""
+    hold_hint: bool = False      # Hinweis "länger drücken" schon gegeben
 
 
 class Phone:
@@ -241,6 +243,7 @@ class Phone:
             return
         if kind not in ("short", "long"):
             return
+        self.key_held = ev.held
         handler = getattr(self, f"key_{self.state.name.lower()}")
         await handler(k, kind)
 
@@ -296,13 +299,26 @@ class Phone:
             self.cancel_job()
             self.state, self.number = S.ENTRY, k
 
+    def hangup_deliberate(self, kind: str) -> bool:
+        """Im Gespräch zählt Auflegen nur, wenn die Taste gehalten wurde – die
+        Wange streift die Taste am Ohr sonst leicht. Einstellen in die Schale
+        legt weiter sofort auf."""
+        hold = self.cfg.hangup_hold_s
+        if kind == "long" or hold <= 0 or getattr(self, "key_held", 0.0) >= hold:
+            return True
+        if self.call and not self.call.hold_hint:
+            self.call.hold_hint = True
+            self.speak(P["hangup_hold"])
+        return False
+
     async def key_outgoing(self, k, kind):
-        if k == "HANGUP":
+        if k == "HANGUP" and self.hangup_deliberate(kind):
             await self.end_call(P["hung_up"])
 
     async def key_in_call(self, k, kind):
         if k == "HANGUP":
-            await self.end_call(P["hung_up"])
+            if self.hangup_deliberate(kind):
+                await self.end_call(P["hung_up"])
         elif k in DIGITS:
             try:
                 await self.modem.dtmf(k)

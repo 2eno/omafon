@@ -41,6 +41,7 @@ DEFAULT_DEBOUNCE_S = 0.08
 class KeyEvent:
     key: str
     kind: str   # down, short, long, up
+    held: float = 0.0   # bei short/up: wie lange die Taste gedrückt war (s)
 
 
 class KeyTracker:
@@ -69,9 +70,10 @@ class KeyTracker:
                 self.long_sent[key] = False
                 self.post(KeyEvent(key, "down"))
             else:
+                held = now - self.since.get(key, now)
                 if not self.long_sent.get(key):
-                    self.post(KeyEvent(key, "short"))
-                self.post(KeyEvent(key, "up"))
+                    self.post(KeyEvent(key, "short", held))
+                self.post(KeyEvent(key, "up", held))
         elif cur and not self.long_sent.get(key):
             if now - self.since[key] >= self.long_overrides.get(key, self.long_s):
                 self.long_sent[key] = True
@@ -167,8 +169,8 @@ class SimHardware:
     def on_charger(self): return self.charging
     async def modem_power_cycle(self): self._say("Modem neu gestartet")
 
-    def press(self, key: str, long: bool = False) -> None:
+    def press(self, key: str, long: bool = False, held: float = 0.1) -> None:
         q = self.events.put_nowait
         q(KeyEvent(key, "down"))
-        q(KeyEvent(key, "long" if long else "short"))
-        q(KeyEvent(key, "up"))
+        q(KeyEvent(key, "long" if long else "short", held))
+        q(KeyEvent(key, "up", held))

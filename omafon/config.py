@@ -40,6 +40,7 @@ class Config:
     volume: int = 4                          # 1..5
     entry_timeout_s: int = 20
     long_press_s: float = 1.2
+    hangup_hold_s: float = 0.5               # im Gespräch: Auflegen erst nach so langem Halten (0 = sofort)
     sos_hold_s: float = 3.0
     sos_cancel_window_s: float = 5.0
     # Audio

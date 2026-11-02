@@ -337,8 +337,8 @@ class FestnetzPhoneTests(Base):
     def said(self):
         return " | ".join(self.audio.spoken)
 
-    async def press(self, key, long=False):
-        self.hw.press(key, long)
+    async def press(self, key, long=False, held=0.1):
+        self.hw.press(key, long, held)
         await self.pump()
 
     async def test_call_out_and_hang_up(self):
@@ -349,7 +349,7 @@ class FestnetzPhoneTests(Base):
         self.assertIn(("dial", "sip:0301234@fritz.box"), self.sim.server.commands)
         self.sim.inject("call_begin")
         self.assertTrue(await self.pump_until(lambda: self.phone.state == S.IN_CALL))
-        await self.press("HANGUP")
+        await self.press("HANGUP", held=0.6)
         self.assertEqual(self.phone.state, S.IDLE)
         self.assertIn("hangup", self.commands())
 
