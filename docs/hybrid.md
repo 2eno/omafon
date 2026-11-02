@@ -135,11 +135,13 @@ Akkuwarnungen bei 20/10/5 % kommen per Ansage.
 
 ### Gehäuse und Ladeschale
 
-- Das Handteil wird durch HAT und größeren Akku etwa **6–8 mm dicker**. In
-  `cad/omafon_ladeschale.scad` nur die Parameter anpassen, z. B.
-  `openscad -D hand_t=32 -D 'teil="schale"' …`. Kontakte, Kodierrippe und
-  Trichter wachsen mit.
-- SIM-Halter hinter einer Klappe erreichbar machen. Oma muss da nie ran.
+- Das Handteil ist durch HAT und größeren Akku **6 mm dicker** (36 statt 30 mm).
+  Gehäuse und Ladeschale nehmen das über `variante="hybrid"` aus
+  `cad/omafon_masse.scad`. Das fertige Druckpaket liegt im CI-Artefakt unter
+  `gehaeuse/mobil_hybrid/` und `ladeschale/mobil_hybrid/`. Teileliste und
+  Zusammenbau: [druckteile.md](druckteile.md).
+- Die SIM-Karte steckt im HAT über dem Pi. Zum Wechseln das Gehäuse öffnen
+  (4 Schrauben hinten). Das ist selten nötig, und Oma muss da nie ran.
 
 ## 6. Offene Fragen
 

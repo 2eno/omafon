@@ -38,7 +38,10 @@ Status: Software im Simulator getestet, Hardware ungetestet.
 | `tests/test_omafon.py` | Kern- und Mobilfunk-Tests ohne Hardware (Sim-Klassen) |
 | `tests/test_festnetz.py` | SIP-Backend gegen FakeBaresip, Fritz!Box, Ladeschale |
 | `tests/test_hybrid.py` | Hybrid-Routing, Notruf, Zweitanruf, Sparmodus |
+| `cad/omafon_masse.scad` | Gemeinsame Maße Handteil/Ladeschale je `variante` (festnetz 30 mm, mobil/hybrid 36 mm dick) |
+| `cad/omafon_gehaeuse.scad` | Handteil-Gehäuse: deckel, wanne, tastenplatte, akkudeckel, notrufklappe, lautstaerke_*; STL in Druckrichtung |
 | `cad/omafon_ladeschale.scad` | Ladeschale mit Lautsprecher, Federkontakten, Kodierrippe |
+| `docs/druckteile.md` | Teileliste, Druckeinstellungen, Kaufteile, Zusammenbau (liegt auch im STL-Paket) |
 | `config.festnetz.example.yaml` | Beispielkonfiguration Festnetz (nur Platzhalter) |
 | `cad/omafon_tasten.scad` | Tastenkappen und Tastenfront, parametrisch |
 | `systemd/omafon.service` | Dienst mit Watchdog |
@@ -54,6 +57,7 @@ python3 -m omafon.main --config config.hybrid.example.yaml --sim    # Hybrid-Sim
 python3 -m tools.prerender /etc/omafon/config.yaml        # Ansagen vorab rendern (Pi)
 openscad -D 'teil="ziffer"' -D 'ziffer="5"' -o taste_5.stl cad/omafon_tasten.scad
 openscad -D 'teil="ziffer"' -D 'ziffer="5"' -D 'farbteil="zeichen"' -o taste_5_zeichen.stl cad/omafon_tasten.scad
+openscad -D 'variante="hybrid"' -D 'teil="wanne"' -o wanne.stl cad/omafon_gehaeuse.scad
 ```
 
 Im Simulator: Tasten `0-9 * #`, `a` Anrufen, `h` Auflegen, `m` Nachricht, `i` Info,
@@ -78,6 +82,9 @@ Im Simulator: Tasten `0-9 * #`, `a` Anrufen, `h` Auflegen, `m` Nachricht, `i` In
    Tastendruck. Kein Gong im Gespräch, in Menüs oder in der Ruhezeit.
 6. **Tasten gut lesbar halten:** Zeichen immer in Kontrastfarbe zur Kappe
    (`FARBEN` in der SCAD-Datei), Kappe und Zeichen als getrennte Körper (`farbteil`).
+   **Maße von Handteil und Ladeschale nur in `cad/omafon_masse.scad`** ändern, sonst
+   passt das Telefon nicht mehr in die Schale. CAD-Teile müssen ohne OpenSCAD-Warnung
+   rendern (CI bricht sonst ab), STL-Ausgabe immer in Druckrichtung ohne Stützen.
 7. **Phone spricht nur über `TelephonyBackend`.** Neue Netzfunktionen als Methode/
    Ereignis im Backend, nie Backend-Sonderfälle in `phone.py`. Optionale Fähigkeiten
    (`supports_sms`, `online`, `status_words`) haben sichere Standardwerte.

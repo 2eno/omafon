@@ -20,6 +20,10 @@ Stückliste und Verkabelung in [docs/festnetz-hardware.md](docs/festnetz-hardwar
 
 *Vorschau mit Ersatzschrift Liberation Sans; vorgesehen ist Atkinson Hyperlegible.*
 
+| Handteil vorn | Handteil hinten | Ladeschale |
+|---|---|---|
+| ![Handteil von vorn mit Tastenkappen, Hörer oben, Mikrofon und Ladekontakten unten](cad/gehaeuse_vorschau_vorn.png) | ![Rückseite mit roter Notrufklappe, Akkudeckel, Lautsprechergitter und Kodiernut](cad/gehaeuse_vorschau_hinten.png) | ![Ladeschale mit eingestecktem Handteil (angedeutet) und Lautsprechergrill dahinter](cad/ladeschale_vorschau.png) |
+
 ## Status
 
 **Software im Simulator getestet, Hardware ungetestet.**
@@ -28,9 +32,10 @@ Stückliste und Verkabelung in [docs/festnetz-hardware.md](docs/festnetz-hardwar
   Wählen, Anrufe, SMS, Sprachwahl, Diktat und Notruf ab.
 - Modem, Tastenmatrix, Verstärker, Akku-Messung und Gehäuseteile sind noch
   nicht an echter Hardware erprobt.
-- Die STL-Dateien der Tastenkappen und der Front werden bei jedem Push von der
-  CI erzeugt (Artefakt `omafon-stl`): `einfarbig/` und `zweifarbig/`
-  (je Taste `*_kappe.stl` + `*_zeichen.stl` für Mehrmaterial-Druck).
+- **Komplettes Druckpaket:** Die CI erzeugt bei jedem Push alle STL-Dateien
+  (Artefakt `omafon-stl`). Darin sind Tastenkappen ein- und zweifarbig, das Gehäuse
+  und die Ladeschale je Variante sowie die Druck- und Montageanleitung
+  ([docs/druckteile.md](docs/druckteile.md)). Gedruckt ist davon noch nichts.
 
 ## Neue Nachrichten
 
@@ -64,8 +69,10 @@ omafon/
   hardware.py   Tasten (MCP23017 + GPIO), Entprellung, Akku, Vibration
   numbers.py    "zwo" statt "zwei", Nummern in Gruppen, Uhrzeit
 tools/prerender.py   feste Ansagen vorab erzeugen
+cad/omafon_masse.scad      gemeinsame Maße Handteil/Ladeschale, Variante
+cad/omafon_gehaeuse.scad   Handteil: Deckel, Wanne, Tastenplatte, Akkudeckel, Notrufklappe …
 cad/omafon_tasten.scad     Tastenkappen und Tastenfront (OpenSCAD)
-cad/omafon_ladeschale.scad Ladeschale mit Lautsprecher (Festnetz)
+cad/omafon_ladeschale.scad Ladeschale mit Lautsprecher
 systemd/omafon.service
 tests/test_omafon.py       23 Tests (Kern, Mobilfunk), ohne Hardware
 tests/test_festnetz.py     30 Tests (SIP-Backend, Fritz!Box, Ladeschale), ohne Hardware
