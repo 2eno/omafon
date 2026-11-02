@@ -11,6 +11,7 @@ Raspberry Pi Zero 2 W, Python 3 (asyncio), zwei Varianten:
 |---|---|---|---|
 | Mobilfunk | `sim7600` | LTE, SMS, GPS | Waveshare SIM7600E-H 4G HAT |
 | Festnetz | `sip` | Fritz!Box per WLAN (IP-Telefon), Anrufbeantworter, Telefonbuch | Ladeschale mit Lautsprecher, kein Modem |
+| Hybrid | `hybrid` | zu Hause Fritz!Box, unterwegs LTE – automatisch | beides, größerer Akku ([docs/hybrid.md](docs/hybrid.md)) |
 
 Festnetz: Recherche und Bewertung in [docs/festnetz-recherche.md](docs/festnetz-recherche.md),
 Stückliste und Verkabelung in [docs/festnetz-hardware.md](docs/festnetz-hardware.md).
@@ -54,6 +55,7 @@ omafon/
   modem.py      Backend sim7600: AT-Treiber SIM7600 (+ SimModem)
   sip.py        Backend sip: baresip über ctrl_tcp, Fritz!Box, Verbindungsüberwachung
   sipsim.py     nachgebautes baresip + Fritz!Box für Tests und --sim
+  hybrid.py     Backend hybrid: Fritz!Box + Mobilfunk, Routing, Sparmodus
   fritz.py      TR-064: Telefonbuch, Anrufbeantworter
   notify.py     Telegram/E-Mail statt SMS (Festnetz, optional)
   pdu.py        SMS im PDU-Modus: Umlaute, Emojis, lange SMS
@@ -67,6 +69,7 @@ cad/omafon_ladeschale.scad Ladeschale mit Lautsprecher (Festnetz)
 systemd/omafon.service
 tests/test_omafon.py       23 Tests (Kern, Mobilfunk), ohne Hardware
 tests/test_festnetz.py     30 Tests (SIP-Backend, Fritz!Box, Ladeschale), ohne Hardware
+tests/test_hybrid.py       15 Tests (Routing, Notruf, Zweitanruf, Sparmodus), ohne Hardware
 docs/                      Stückliste, Verkabelung, Festnetz-Recherche und -Hardware
 ```
 
@@ -90,6 +93,10 @@ python3 -m omafon.main --config config.festnetz.example.yaml --sim
 Dort legt `!sms <nr>` eine Nachricht auf den Anrufbeantworter, `!wlan aus` / `!wlan an`
 trennt die Fritz!Box (nach 10 s kommt „Keine Verbindung zur Fritzbox“),
 `lade` / `ab` stellt das Telefon in die Schale bzw. hebt es ab.
+
+Hybridgerät im Simulator: `--config config.hybrid.example.yaml --sim`, zusätzlich
+`!mring <nr>` (Anruf auf die Handynummer), `!ab <nr>` (Anrufbeantworter),
+`!netz aus` / `!netz an` (Funkloch). Bedienung und Regeln: [docs/hybrid.md](docs/hybrid.md).
 
 ## Festnetz auf dem Pi (zusätzlich zur Installation unten)
 

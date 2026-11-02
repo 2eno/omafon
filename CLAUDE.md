@@ -25,6 +25,7 @@ Status: Software im Simulator getestet, Hardware ungetestet.
 | `omafon/modem.py` | Backend `sim7600`: AT-Treiber SIM7600, URC-Auswertung; `SimModem` für Tests |
 | `omafon/sip.py` | Backend `sip`: baresip über ctrl_tcp, Fritz!Box-AB und -Telefonbuch, Verbindungsüberwachung |
 | `omafon/sipsim.py` | `FakeBaresip` (ctrl_tcp-Server), `SipSimulator`, `LogNotifier` für Tests und `--sim` |
+| `omafon/hybrid.py` | Backend `hybrid`: Fritz!Box + Mobilfunk gleichzeitig, Routing, Sparmodus; `HybridSimulator` |
 | `omafon/fritz.py` | TR-064 (fritzconnection), XML-Parser, `SimFritzBox` |
 | `omafon/notify.py` | Telegram/E-Mail als SMS-Ersatz (Notruf-Hinweis, Diktat), standardmäßig aus |
 | `omafon/pdu.py` | SMS im PDU-Modus (GSM-7, UCS-2, lange SMS) |
@@ -36,6 +37,7 @@ Status: Software im Simulator getestet, Hardware ungetestet.
 | `tools/prerender.py` | Alle festen Ansagen vorab als WAV erzeugen |
 | `tests/test_omafon.py` | Kern- und Mobilfunk-Tests ohne Hardware (Sim-Klassen) |
 | `tests/test_festnetz.py` | SIP-Backend gegen FakeBaresip, Fritz!Box, Ladeschale |
+| `tests/test_hybrid.py` | Hybrid-Routing, Notruf, Zweitanruf, Sparmodus |
 | `cad/omafon_ladeschale.scad` | Ladeschale mit Lautsprecher, Federkontakten, Kodierrippe |
 | `config.festnetz.example.yaml` | Beispielkonfiguration Festnetz (nur Platzhalter) |
 | `cad/omafon_tasten.scad` | Tastenkappen und Tastenfront, parametrisch |
@@ -48,6 +50,7 @@ pip install -r requirements-dev.txt                       # nur PyYAML
 python3 -m unittest discover -s tests -v                  # Tests
 python3 -m omafon.main --config config.example.yaml --sim # Simulator (Daten in ./sim-data)
 python3 -m omafon.main --config config.festnetz.example.yaml --sim  # Festnetz-Simulator
+python3 -m omafon.main --config config.hybrid.example.yaml --sim    # Hybrid-Simulator
 python3 -m tools.prerender /etc/omafon/config.yaml        # Ansagen vorab rendern (Pi)
 openscad -D 'teil="ziffer"' -D 'ziffer="5"' -o taste_5.stl cad/omafon_tasten.scad
 openscad -D 'teil="ziffer"' -D 'ziffer="5"' -D 'farbteil="zeichen"' -o taste_5_zeichen.stl cad/omafon_tasten.scad
@@ -82,6 +85,9 @@ Im Simulator: Tasten `0-9 * #`, `a` Anrufen, `h` Auflegen, `m` Nachricht, `i` In
    Wählen ohne Verbindung sagt das sofort. Das Backend baut selbst wieder auf.
 9. **Anrufernamen nur aus Kontakten und dem Fritz!Box-Telefonbuch**, nie aus dem
    SIP-Anzeigenamen (vom Anrufer frei wählbar → Betrugsgefahr).
-10. Keine echten Telefonnummern, Standorte oder Zugangsdaten committen.
+10. **Hybrid: Notruf hat immer einen zweiten Weg.** Scheitert ein Weg, sofort den
+    anderen; 110/112 über Mobilfunk auch ohne eigenes Netz. „Kein Netz“ erst, wenn
+    beide Wege fehlen. Zweitanrufe auf dem anderen Weg abweisen, nie anklopfen.
+11. Keine echten Telefonnummern, Standorte oder Zugangsdaten committen.
    `config.yaml` ist in `.gitignore`; Beispiele gehören in `config.example.yaml` bzw.
    `config.festnetz.example.yaml`, Kennwörter dort nur als `PLATZHALTER_…`.
