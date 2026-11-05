@@ -82,17 +82,13 @@ class SettingsViewModel(app: Application, id: String) : DeviceViewModel<Settings
     fun save() {
         val changes = edits.value
         if (changes.isEmpty()) return
-        saving.value = true
-        action { api ->
-            try {
-                val res = api.putSettings(changes)
-                edits.value = emptyMap()
-                say(if (res.restart) "Gespeichert. Das Omafon startet kurz neu, sobald es in Ruhe ist."
-                    else "Gespeichert und sofort wirksam.")
-                refresh(silent = true)
-            } finally {
-                saving.value = false
-            }
+        action(saving) { api ->
+            val res = api.putSettings(changes)
+            // Nur das Gespeicherte verwerfen: inzwischen Geändertes bleibt stehen
+            edits.update { now -> now.filter { (k, v) -> changes[k] != v } }
+            say(if (res.restart) "Gespeichert. Das Omafon startet kurz neu, sobald es in Ruhe ist."
+                else "Gespeichert und sofort wirksam.")
+            refresh(silent = true)
         }
     }
 }

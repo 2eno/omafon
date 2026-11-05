@@ -183,6 +183,11 @@ ausfällt.
 6. **baresip-Details:** Ob `stopringing` den baresip-eigenen Klingelton zuverlässig
    stoppt und `netroam` nach einem WLAN-Wechsel neu registriert, lässt sich erst
    am Pi prüfen.
+7. **Zweitanruf während eines Gesprächs:** Omafon meldet ihn nicht (kein Anklopfen)
+   und wertet seine Ereignisse über die Gesprächs-ID aus. Er klingelt beim Anrufer
+   aber weiter, bis der aufgibt. Ob `hangup` die richtige Verbindung trifft, wenn
+   baresip den Zweitanruf zur „aktuellen“ macht, und ob die installierte Version
+   `hangup <call-id>` kennt, am Pi prüfen – dann den Zweitanruf aktiv abweisen.
 
 ## Quellen
 

@@ -47,6 +47,9 @@ fun Throwable.userMessage(): String = when (this) {
 
 fun Throwable.isUnauthorized() = this is ApiException && unauthorized
 
+/** Nur neu koppeln hilft: Token ungültig oder Zertifikat des Omafon geändert. */
+fun Throwable.needsRepair() = this is ApiException && (unauthorized || certificateChanged)
+
 @Composable
 fun container(): AppContainer = (LocalContext.current.applicationContext as OmafonApp).container
 

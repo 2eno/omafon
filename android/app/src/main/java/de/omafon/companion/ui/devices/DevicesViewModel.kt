@@ -21,23 +21,25 @@ import kotlinx.coroutines.launch
 data class DevicesUi(
     val saved: List<SavedDevice> = emptyList(),
     val found: List<FoundDevice> = emptyList(),   // noch nicht gekoppelt
-    val searching: Boolean = true,
+    val searchError: String? = null,              // mDNS geht nicht (z. B. kein WLAN)
 )
 
 class DevicesViewModel(app: Application) : AndroidViewModel(app) {
     private val store = (app as OmafonApp).container.store
     private val checked = mutableSetOf<String>()
     private val _foundSaved = MutableStateFlow<Map<String, String>>(emptyMap())   // host:port -> device_id
+    private val searchError = MutableStateFlow<String?>(null)
 
     private val discovery = discoverOmafons(app)
-        .onEach { list -> list.forEach { matchSaved(it) } }
-        .catch { emit(emptyList()) }
+        .onEach { list -> searchError.value = null; list.forEach { matchSaved(it) } }
+        .catch { e -> searchError.value = e.message ?: "Suche im WLAN geht gerade nicht"; emit(emptyList()) }
 
-    val ui: StateFlow<DevicesUi> = combine(store.devices, discovery, _foundSaved) { saved, found, known ->
+    val ui: StateFlow<DevicesUi> = combine(store.devices, discovery, _foundSaved, searchError) { saved, found, known, err ->
         val savedIds = saved.map { it.id }.toSet()
         DevicesUi(
             saved = saved,
             found = found.filter { f -> known["${f.host}:${f.port}"]?.let { it !in savedIds } ?: true },
+            searchError = err,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DevicesUi())
 

@@ -62,6 +62,10 @@ Lautstärke wirkt sofort.
 `/data/omafon/config.yaml`, gilt diese. Ist sie beschädigt, startet das Omafon
 mit der Vorlage.
 
+Die App schreibt die Datei neu: **Kommentare gehen dabei verloren.** Wer lieber
+von Hand pflegt, schaltet die Verwaltung aus (`admin: {enabled: false}`) – dann
+gilt wieder nur `/etc/omafon/config.yaml`.
+
 ## Updates
 
 ```
@@ -81,6 +85,13 @@ App            Omafon                                  Webserver
   kaputten Update zurückschalten.
 - „Zurück zur vorherigen Version“ in der App geht jederzeit, solange die
   vorherige Version noch da ist.
+- **Nie auf eine ältere Version:** Das Omafon installiert nur Versionen, die neuer
+  sind als die laufende – ein abgefangenes, altes (aber echt signiertes) Manifest
+  kann keine behobene Lücke zurückbringen. Zurück geht nur über „vorherige Version“.
+- Weitere Prüfungen: Versionsname (keine Pfadzeichen), SHA-256, höchstens 50 MB,
+  und die neue Version muss beim Importtest genau die angekündigte Nummer melden.
+- systemd gibt nie auf (`StartLimitIntervalSec=0`): auch nach mehreren schnellen
+  Abstürzen startet der Dienst weiter, bis der Rückfall greift.
 
 ### Update-Kanal einrichten (einmalig, am PC)
 

@@ -435,6 +435,14 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
             await self.pump(2)
         self.assertEqual(len(self.phone.missed), 20)
 
+    async def test_older_message_header_has_single_full_stop(self):
+        self.clock = dt.datetime(2026, 11, 5, 15, 0)
+        self.modem.inject_sms("+491711234567", "Alt")               # Zeitstempel 1.11.
+        await self.pump()
+        await self.press("MSG")
+        self.assertIn("Neue Nachricht von Peter, am 1. 11. Alt", self.said())
+        self.assertNotIn("..", self.said())
+
     def test_texts_are_in_p_dict(self):
         """Regel 3: feste Ansagen nur in P (sonst fehlen sie im WAV-Cache)."""
         import re

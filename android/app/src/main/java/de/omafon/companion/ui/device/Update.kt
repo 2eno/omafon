@@ -52,7 +52,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
 /** Was die App gerade über den Ablauf weiß (über die Phase des Omafon hinaus). */
-enum class UpdateStep { NONE, CHECKING, WORKING, RESTARTING, DONE }
+enum class UpdateStep { NONE, WORKING, RESTARTING, DONE }
 
 /** Text zur Phase des Omafon (omafon/update.py). */
 fun phaseLabel(phase: String) = when (phase) {
@@ -67,23 +67,17 @@ fun phaseLabel(phase: String) = when (phase) {
 
 class UpdateViewModel(app: Application, id: String) : DeviceViewModel<UpdateInfo>(app, id) {
     val step = MutableStateFlow(UpdateStep.NONE)
+    val checking = MutableStateFlow(false)
     private var poll: Job? = null
     private var target: String? = null
 
     override suspend fun fetch(api: OmafonApi) = api.update()
 
-    fun check() {
-        step.value = UpdateStep.CHECKING
-        action { api ->
-            try {
-                val info = api.updateCheck()
-                _state.value = _state.value.copy(data = info, error = null)
-                say(if (info.updateAvailable) "Version ${info.available?.version} ist verfügbar."
-                    else "Das Omafon ist auf dem neuesten Stand.")
-            } finally {
-                step.value = UpdateStep.NONE
-            }
-        }
+    fun check() = action(checking) { api ->
+        val info = api.updateCheck()
+        _state.value = _state.value.copy(data = info, error = null)
+        say(if (info.updateAvailable) "Version ${info.available?.version} ist verfügbar."
+            else "Das Omafon ist auf dem neuesten Stand.")
     }
 
     fun install() {
@@ -142,6 +136,7 @@ fun UpdateScreen(deviceId: String, onBack: () -> Unit) {
     val vm: UpdateViewModel = viewModel(key = "update-$deviceId") { UpdateViewModel(app, deviceId) }
     val state by vm.state.collectAsStateWithLifecycle()
     val step by vm.step.collectAsStateWithLifecycle()
+    val checking by vm.checking.collectAsStateWithLifecycle()
     val snack = remember { SnackbarHostState() }
     var confirmInstall by remember { mutableStateOf(false) }
     var confirmRollback by remember { mutableStateOf(false) }
@@ -193,7 +188,7 @@ fun UpdateScreen(deviceId: String, onBack: () -> Unit) {
                     }
                     else -> {}
                 }
-                if (u.updateAvailable && step == UpdateStep.NONE) {
+                if (u.updateAvailable && (step == UpdateStep.NONE || step == UpdateStep.DONE)) {
                     SectionCard {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Icon(Icons.Outlined.NewReleases, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.primary)
@@ -205,11 +200,13 @@ fun UpdateScreen(deviceId: String, onBack: () -> Unit) {
                         }
                     }
                 }
-                OutlinedButton(onClick = vm::check, enabled = u.configured && step == UpdateStep.NONE && !u.busy,
+                OutlinedButton(onClick = { vm.check() },
+                    enabled = u.configured && !checking && step != UpdateStep.WORKING &&
+                        step != UpdateStep.RESTARTING && !u.busy,
                     modifier = Modifier.fillMaxWidth()) {
-                    Text(if (step == UpdateStep.CHECKING) "Sucht …" else "Nach Updates suchen")
+                    Text(if (checking) "Sucht …" else "Nach Updates suchen")
                 }
-                if (u.canRollback && step == UpdateStep.NONE) {
+                if (u.canRollback && (step == UpdateStep.NONE || step == UpdateStep.DONE)) {
                     TextButton(onClick = { confirmRollback = true }, modifier = Modifier.fillMaxWidth()) {
                         Text("Zur vorherigen Version zurück")
                     }

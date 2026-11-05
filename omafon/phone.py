@@ -818,9 +818,10 @@ class Phone:
         m["read"] = True
         self._save("inbox.json", self.inbox)
         who = self.name_or_number(m["sender"])
-        when = self.when_words(m["time"])
-        head = (f"{intro} Von {who}, {when}." if intro else
-                f"{'Neue ' if new else ''}Nachricht von {who}, {when}.")
+        when = self.when_words(m["time"]).rstrip(".")      # "am 1. 11." -> kein doppelter Punkt
+        when = f", {when}" if when else ""
+        head = (f"{intro} Von {who}{when}." if intro else
+                f"{'Neue ' if new else ''}Nachricht von {who}{when}.")
         await self.audio.say(f"{head} {m['text']}")
         if m.get("audio"):
             await self.audio.play(Path(m["audio"]), interrupt=False)

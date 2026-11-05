@@ -4,6 +4,7 @@ import de.omafon.companion.data.ApiException
 import de.omafon.companion.data.Contact
 import de.omafon.companion.data.OmafonApi
 import de.omafon.companion.data.PinningTrustManager
+import de.omafon.companion.ui.needsRepair
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
@@ -63,6 +64,7 @@ class ApiTest {
             fail("Falsches Zertifikat angenommen")
         } catch (e: ApiException) {
             assertTrue(e.certificateChanged)
+            assertTrue("Neu koppeln anbieten", e.needsRepair())
         }
     }
 
@@ -73,6 +75,7 @@ class ApiTest {
             fail()
         } catch (e: ApiException) {
             assertTrue(e.unauthorized)
+            assertTrue(e.needsRepair())
             assertEquals("Unbekannte App – bitte neu koppeln", e.message)
         }
         assertEquals("Bearer geheim", server.takeRequest().getHeader("Authorization"))
@@ -110,6 +113,7 @@ class ApiTest {
             fail()
         } catch (e: ApiException) {
             assertTrue(e.offline)
+            assertTrue("offline: nochmal versuchen, nicht neu koppeln", !e.needsRepair())
         }
     }
 }

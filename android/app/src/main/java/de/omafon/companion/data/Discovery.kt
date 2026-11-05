@@ -20,6 +20,8 @@ fun discoverOmafons(context: Context): Flow<List<FoundDevice>> = callbackFlow {
     val lock = wifi.createMulticastLock("omafon-suche").apply { setReferenceCounted(false); acquire() }
     val found = linkedMapOf<String, FoundDevice>()
     val executor = Executors.newSingleThreadExecutor()
+    val pending = ArrayDeque<NsdServiceInfo>()
+    var resolving = false
 
     fun publish() { trySend(found.values.toList()) }
 
@@ -31,10 +33,33 @@ fun discoverOmafons(context: Context): Flow<List<FoundDevice>> = callbackFlow {
         }
     }
 
+    fun resolveNext() {
+        val next = synchronized(pending) {
+            if (resolving || pending.isEmpty()) return
+            resolving = true
+            pending.removeFirst()
+        }
+        @Suppress("DEPRECATION")
+        nsd.resolveService(next, object : NsdManager.ResolveListener {
+            override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) = done()
+            override fun onServiceResolved(info: NsdServiceInfo) {
+                resolved(info)
+                done()
+            }
+
+            private fun done() {
+                synchronized(pending) { resolving = false }
+                resolveNext()
+            }
+        })
+    }
+
     val listener = object : NsdManager.DiscoveryListener {
         override fun onDiscoveryStarted(serviceType: String) {}
         override fun onDiscoveryStopped(serviceType: String) {}
-        override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) { close() }
+        override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
+            close(IllegalStateException("mDNS-Suche startet nicht ($errorCode)"))
+        }
         override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {}
         override fun onServiceLost(info: NsdServiceInfo) {
             synchronized(found) { if (found.remove(info.serviceName) != null) publish() }
@@ -52,11 +77,10 @@ fun discoverOmafons(context: Context): Flow<List<FoundDevice>> = callbackFlow {
                     override fun onServiceInfoCallbackUnregistered() {}
                 })
             } else {
-                @Suppress("DEPRECATION")
-                nsd.resolveService(info, object : NsdManager.ResolveListener {
-                    override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) {}
-                    override fun onServiceResolved(info: NsdServiceInfo) = resolved(info)
-                })
+                // Vor Android 14 kann NsdManager nur eine Auflösung gleichzeitig –
+                // eine zweite scheitert mit FAILURE_ALREADY_ACTIVE. Darum nacheinander.
+                synchronized(pending) { pending.addLast(info) }
+                resolveNext()
             }
         }
     }

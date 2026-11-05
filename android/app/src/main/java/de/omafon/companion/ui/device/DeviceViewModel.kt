@@ -7,8 +7,9 @@ import de.omafon.companion.OmafonApp
 import de.omafon.companion.data.OmafonApi
 import de.omafon.companion.data.SavedDevice
 import de.omafon.companion.ui.Loadable
-import de.omafon.companion.ui.isUnauthorized
+import de.omafon.companion.ui.needsRepair
 import de.omafon.companion.ui.userMessage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,11 +28,13 @@ abstract class DeviceViewModel<T>(app: Application, val deviceId: String) : Andr
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val messages: SharedFlow<String> = _messages.asSharedFlow()
     val device = MutableStateFlow<SavedDevice?>(null)
-    private var loadJob: Job? = null
+    private var loadJob: Job? = null           // vor init deklarieren, sonst überschreibt null den Job
 
     protected abstract suspend fun fetch(api: OmafonApi): T
 
-    init { refresh() }
+    // Erst laden, wenn auch die Felder der Unterklasse initialisiert sind:
+    // Dispatchers.Main (nicht .immediate) läuft erst nach dem Konstruktor.
+    init { viewModelScope.launch(Dispatchers.Main) { refresh() } }
 
     protected suspend fun api(): OmafonApi {
         val d = device.value ?: container.store.get(deviceId) ?: throw IllegalStateException("Gerät nicht gespeichert")
@@ -47,19 +50,29 @@ abstract class DeviceViewModel<T>(app: Application, val deviceId: String) : Andr
                 .onSuccess { data -> _state.value = Loadable(data) }
                 .onFailure { e ->
                     if (e is kotlinx.coroutines.CancellationException) throw e
-                    _state.update { it.copy(loading = false, error = e.userMessage(), unauthorized = e.isUnauthorized()) }
+                    _state.update { it.copy(loading = false, error = e.userMessage(), unauthorized = e.needsRepair()) }
                 }
         }
     }
 
     protected fun say(msg: String) { _messages.tryEmit(msg) }
 
-    /** Aktion mit Fehlermeldung als Snackbar. */
-    protected fun action(block: suspend (OmafonApi) -> Unit) {
+    /**
+     * Aktion mit Fehlermeldung als Snackbar. [busy] wird während der Aktion
+     * true und danach immer wieder false – auch wenn das Omafon nicht antwortet.
+     */
+    protected fun action(busy: MutableStateFlow<Boolean>? = null, block: suspend (OmafonApi) -> Unit) {
+        if (busy?.value == true) return            // doppelt getippt
+        busy?.value = true
         viewModelScope.launch {
-            runCatching { block(api()) }.onFailure { e ->
-                if (e is kotlinx.coroutines.CancellationException) throw e
+            try {
+                block(api())
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 say(e.userMessage())
+            } finally {
+                busy?.value = false
             }
         }
     }

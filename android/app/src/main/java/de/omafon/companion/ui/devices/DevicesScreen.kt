@@ -95,8 +95,13 @@ fun DevicesScreen(
                 }
             }
             item { SectionTitle("Im WLAN gefunden") }
-            item { LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 4.dp)) }
-            if (ui.found.isEmpty()) {
+            ui.searchError?.let { err ->
+                item {
+                    Text("$err – Adresse von Hand eingeben.", Modifier.padding(8.dp),
+                        color = MaterialTheme.colorScheme.error)
+                }
+            } ?: item { LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 4.dp)) }
+            if (ui.found.isEmpty() && ui.searchError == null) {
                 item {
                     Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("Suche läuft …", style = MaterialTheme.typography.bodyLarge)

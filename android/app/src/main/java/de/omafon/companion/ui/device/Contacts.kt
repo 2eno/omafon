@@ -80,16 +80,11 @@ class ContactsViewModel(app: Application, id: String) : DeviceViewModel<List<Con
 
     fun save() {
         val list = draft.value ?: return
-        saving.value = true
-        action { api ->
-            try {
-                api.putContacts(list)
-                draft.value = null
-                say("Kontakte gespeichert. Das Omafon startet kurz neu, sobald es in Ruhe ist.")
-                refresh(silent = true)
-            } finally {
-                saving.value = false
-            }
+        action(saving) { api ->
+            api.putContacts(list)
+            if (draft.value == list) draft.value = null
+            say("Kontakte gespeichert. Das Omafon startet kurz neu, sobald es in Ruhe ist.")
+            refresh(silent = true)
         }
     }
 }
