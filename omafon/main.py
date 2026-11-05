@@ -117,6 +117,34 @@ def sim_console(loop, events, hw, modem, stt) -> None:
                 put(KeyEvent(key, "up"))
 
 
+def use_saved_config(seed_path: str, cfg):
+    """Die App speichert Einstellungen in <data_dir>/config.yaml – /etc ist mit dem
+    Overlay-Dateisystem schreibgeschützt. Gibt es diese Datei, gilt sie; ist sie
+    kaputt, startet das Telefon mit der Vorlage aus /etc (nie ohne Konfiguration).
+    Ist die Verwaltung an und die Datei fehlt, wird die Vorlage dorthin kopiert."""
+    import shutil
+    from pathlib import Path
+    saved = Path(cfg.data_dir) / "config.yaml"
+    if saved.resolve() == Path(seed_path).resolve():
+        return seed_path, cfg
+    if saved.exists():
+        import yaml
+        try:
+            return str(saved), config_mod.load(saved)
+        except (OSError, ValueError, TypeError, yaml.YAMLError) as e:
+            log.error("%s ungültig (%s) – starte mit %s", saved, e, seed_path)
+            return seed_path, cfg
+    if (getattr(cfg, "admin", None) or {}).get("enabled", True):
+        try:
+            saved.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(seed_path, saved)
+            os.chmod(saved, 0o600)
+            return str(saved), cfg
+        except OSError as e:
+            log.error("Kann %s nicht anlegen: %s", saved, e)
+    return seed_path, cfg
+
+
 async def amain(args) -> None:
     config_path = args.config
     if args.sim and args.admin:
@@ -130,6 +158,8 @@ async def amain(args) -> None:
             shutil.copy(args.config, copy)
         config_path = str(copy)
     cfg = config_mod.load(config_path)
+    if not args.sim:
+        config_path, cfg = use_saved_config(config_path, cfg)
     loop = asyncio.get_running_loop()
     events: asyncio.Queue = asyncio.Queue()
     if args.sim:

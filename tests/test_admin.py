@@ -124,7 +124,8 @@ class PairingTests(AdminBase):
         self.assertIn(P["pair_intro"], said)
         self.assertIn(P["pair_again"], said)
         from omafon.numbers import DIGIT_WORDS
-        self.assertIn(", ".join(DIGIT_WORDS[d] for d in self.admin.pair_code), said)
+        digits = " | ".join(DIGIT_WORDS[d] for d in self.admin.pair_code)
+        self.assertEqual(said.count(digits), 2, said)          # Code zweimal, Ziffer für Ziffer
 
     async def test_clients_list_and_unpair(self):
         tok = self.token()
@@ -411,6 +412,38 @@ class UpdateTests(unittest.TestCase):
     def test_not_configured(self):
         with self.assertRaises(UpdateError):
             Updater(self.data, __version__).check()
+
+
+class SavedConfigTests(unittest.TestCase):
+    """Auf dem Pi ist /etc schreibgeschützt: App-Änderungen liegen in /data."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        d = Path(self.tmp.name)
+        self.seed = d / "etc.yaml"
+        text = (ROOT / "config.festnetz.example.yaml").read_text(encoding="utf-8")
+        self.seed.write_text(text.replace("data_dir: /data/omafon", f"data_dir: {d / 'data'}"), encoding="utf-8")
+        self.saved = d / "data" / "config.yaml"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_seed_copied_then_saved_copy_wins(self):
+        from omafon.main import use_saved_config
+        path, cfg = use_saved_config(str(self.seed), config.load(self.seed))
+        self.assertEqual(Path(path), self.saved)              # Vorlage nach /data kopiert
+        self.saved.write_text(self.saved.read_text(encoding="utf-8").replace(
+            "hangup_hold_s: 0.5", "hangup_hold_s: 0.9"), encoding="utf-8")
+        path, cfg = use_saved_config(str(self.seed), config.load(self.seed))
+        self.assertEqual(cfg.hangup_hold_s, 0.9)
+
+    def test_broken_saved_copy_falls_back_to_seed(self):
+        from omafon.main import use_saved_config
+        self.saved.parent.mkdir(parents=True)
+        self.saved.write_text("volume: [kaputt", encoding="utf-8")
+        with self.assertLogs("omafon", "ERROR"):
+            path, cfg = use_saved_config(str(self.seed), config.load(self.seed))
+        self.assertEqual(Path(path), self.seed)
 
 
 class ApiFixtureTests(AdminBase):

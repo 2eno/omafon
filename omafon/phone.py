@@ -914,10 +914,12 @@ class Phone:
         if self.admin is None:
             return await self.audio.say(P["pair_off"])
         code = self.admin.open_pairing()
-        digits = ", ".join(DIGIT_WORDS[d] for d in code)
-        await self.audio.say(f"{P['pair_intro']} {digits}.")
-        await asyncio.sleep(self.pause_s)
-        await self.audio.say(f"{P['pair_again']} {digits}.")
+        # Nur vorab gerenderte Stücke (P-Texte, Ziffernwörter): kommt sofort, auch auf dem Pi
+        for intro in ("pair_intro", "pair_again"):
+            await self.audio.say(P[intro])
+            for d in code:
+                await self.audio.say(DIGIT_WORDS[d], interrupt=False)
+            await asyncio.sleep(self.pause_s)
 
     def request_restart(self, phrase_key: str) -> None:
         """Neustart (neue Einstellungen/Version) – erst, wenn das Telefon in Ruhe ist."""

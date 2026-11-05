@@ -15,6 +15,8 @@ Raspberry Pi Zero 2 W, Python 3 (asyncio), zwei Varianten:
 - **Stückliste:** [docs/stueckliste.md](docs/stueckliste.md)
 - **Verkabelung:** [docs/verkabelung.md](docs/verkabelung.md)
 - **Druckteile und Zusammenbau:** [docs/druckteile.md](docs/druckteile.md)
+- **Android-App für Angehörige** (Einstellungen, Kontakte, Updates):
+  [docs/companion-app.md](docs/companion-app.md), Quellcode in [android/](android)
 - Hintergrund: [Festnetz-Recherche](docs/festnetz-recherche.md),
   [Festnetz-Hardware und Strombilanz](docs/festnetz-hardware.md)
 
@@ -38,6 +40,8 @@ Raspberry Pi Zero 2 W, Python 3 (asyncio), zwei Varianten:
   (Artefakt `omafon-stl`). Darin sind Tastenkappen ein- und zweifarbig, das Gehäuse
   und die Ladeschale je Variante sowie die Druck- und Montageanleitung
   ([docs/druckteile.md](docs/druckteile.md)). Gedruckt ist davon noch nichts.
+- **Android-App:** Die CI baut und testet sie (Artefakt `omafon-app-debug`);
+  an einem echten Handy ist sie noch nicht erprobt.
 
 ## Neue Nachrichten
 
@@ -142,7 +146,7 @@ aktualisieren oder beim SIMCom-Support nach dem passenden VoLTE-Profil fragen.
 3. Pakete:
    ```bash
    sudo apt install python3-serial python3-smbus2 python3-gpiozero python3-yaml \
-                    alsa-utils espeak-ng
+                    python3-cryptography alsa-utils espeak-ng avahi-daemon openssl
    sudo pip install --break-system-packages vosk
    ```
 4. **Piper** (Sprachausgabe): Release `piper_linux_aarch64.tar.gz` aus dem
@@ -156,8 +160,11 @@ aktualisieren oder beim SIMCom-Support nach dem passenden VoLTE-Profil fragen.
    `omafon` anlegen (Gruppen audio, dialout, gpio, i2c), Datenpartition `/data`.
 7. `sudo python3 -m tools.prerender /etc/omafon/config.yaml` – erzeugt alle festen Ansagen.
 8. `sudo cp systemd/omafon.service /etc/systemd/system/ && sudo systemctl enable --now omafon`
+   und für die App `sudo cp systemd/omafon.avahi.xml /etc/avahi/services/omafon.service`.
+   Der Dienst startet über `systemd/omafon-start.sh` (aktive Version, Rückfall nach Updates).
 9. Zum Schluss `raspi-config` → Performance → **Overlay File System** an. Das System
-   ist dann schreibgeschützt und übersteht Stromausfälle. Nur `/data` bleibt beschreibbar.
+   ist dann schreibgeschützt und übersteht Stromausfälle. Nur `/data` bleibt beschreibbar –
+   dort speichert die App Einstellungen (`/data/omafon/config.yaml`) und Updates.
 
 ## Namen für die Sprachwahl
 

@@ -39,10 +39,17 @@ Status: Software im Simulator getestet, Hardware ungetestet.
 | `omafon/hardware.py` | Tastenabfrage 100 Hz, Entprellung (`KeyTracker`), Akku, Vibration; `SimHardware` |
 | `omafon/numbers.py` | Ziffernwörter ("zwo"), Nummern in Gruppen, Uhrzeit/Datum |
 | `omafon/config.py` | `config.yaml` laden, Kontakte, Notrufkette |
+| `omafon/admin.py` | Verwaltung für die Android-App: HTTPS+JSON `/api/v1`, Koppeln per Code, Einstellungs-Schema `SETTINGS`, Kontakte |
+| `omafon/update.py` | Signierte Updates (Ed25519), A/B unter `<data_dir>/releases`, Rückfall nach `MAX_BOOTS` Fehlstarts |
 | `tools/prerender.py` | Alle festen Ansagen vorab als WAV erzeugen |
+| `tools/make_release.py` | Update-Schlüssel erzeugen, signiertes Paket + `manifest.json` bauen |
+| `tools/api_fixtures.py` | JSON-Beispiele der Schnittstelle für die App-Tests (`android/app/src/test/resources/api/`) |
+| `android/` | Companion-App (Kotlin, Compose, Material 3): `data/` API, Pinning, Speicher, mDNS; `ui/` Bildschirme |
+| `systemd/omafon-start.sh`, `systemd/omafon.avahi.xml` | Start-Wrapper (aktive Version), mDNS-Dienst `_omafon._tcp` |
 | `tests/test_omafon.py` | Kern-Tests (Tasten, Anrufe, SMS, Notruf) mit SimModem ohne Hardware |
 | `tests/test_festnetz.py` | SIP-Backend gegen FakeBaresip, Fritz!Box, Ladeschale |
 | `tests/test_hybrid.py` | Hybrid-Routing, Notruf, Zweitanruf, Sparmodus |
+| `tests/test_admin.py` | Koppeln, Einstellungen, Neustart nur in Ruhe, HTTPS, Updates/Rückfall, App-Fixtures aktuell |
 | `cad/omafon_masse.scad` | Gemeinsame Maße Handteil/Ladeschale je `variante` (festnetz 30 mm, hybrid 36 mm dick) |
 | `cad/omafon_gehaeuse.scad` | Handteil-Gehäuse: pruefstueck, deckel (mit Schalterplatte), wanne, tastengitter, akkudeckel, notrufklappe, lautstaerke_*, hoererkopf, hoermuschel; STL in Druckrichtung |
 | `cad/omafon_ladeschale.scad` | Ladeschale mit Lautsprecher, Federkontakten, Kodierrippe |
@@ -55,11 +62,14 @@ Status: Software im Simulator getestet, Hardware ungetestet.
 ## Befehle
 
 ```bash
-pip install -r requirements-dev.txt                       # nur PyYAML
+pip install -r requirements-dev.txt                       # PyYAML, cryptography
 python3 -m unittest discover -s tests -v                  # Tests
 python3 -m omafon.main --config config.festnetz.example.yaml --sim  # Festnetz-Simulator (Daten in ./sim-data)
 python3 -m omafon.main --config config.hybrid.example.yaml --sim    # Hybrid-Simulator
 python3 -m tools.prerender /etc/omafon/config.yaml        # Ansagen vorab rendern (Pi)
+python3 -m omafon.main --config config.festnetz.example.yaml --sim --admin --admin-port 8443  # Simulator mit App-Schnittstelle
+python3 -m tools.api_fixtures                             # JSON-Beispiele für die App erneuern
+(cd android && ./gradlew testDebugUnitTest assembleDebug)  # App testen und bauen
 openscad -D 'teil="ziffer"' -D 'ziffer="5"' -o taste_5.stl cad/omafon_tasten.scad
 openscad -D 'teil="ziffer"' -D 'ziffer="5"' -D 'farbteil="zeichen"' -o taste_5_zeichen.stl cad/omafon_tasten.scad
 openscad -D 'variante="hybrid"' -D 'teil="wanne"' -o wanne.stl cad/omafon_gehaeuse.scad
@@ -109,3 +119,11 @@ Im Simulator: Tasten `0-9 * #`, `a` Anrufen, `h` Auflegen, `m` Nachricht, `i` In
    bzw. `config.hybrid.example.yaml`, Kennwörter dort nur als `PLATZHALTER_…`.
 12. **Pinbelegung nur gemeinsam ändern:** GPIO-/MCP-Belegung steht in
    `omafon/hardware.py` und `docs/verkabelung.md` – immer beide anpassen.
+13. **Companion-App:** Die Schnittstelle in `omafon/admin.py` ist der Vertrag. Bei
+   Änderungen `python3 -m tools.api_fixtures` laufen lassen und die Kotlin-Modelle in
+   `android/.../data/Models.kt` anpassen. Neue Einstellungen nur in `SETTINGS` eintragen
+   (die App zeigt sie generisch an). Kennwörter nie an die App zurückgeben,
+   `update_public_key` nie über die App änderbar machen. Neustarts nach Änderungen
+   nur über `phone.request_restart()` – das wartet, bis das Telefon in Ruhe ist.
+14. **Einstellungen der App liegen in `<data_dir>/config.yaml`** (`/etc` ist schreibgeschützt);
+   diese Datei hat Vorrang vor `/etc/omafon/config.yaml`.
