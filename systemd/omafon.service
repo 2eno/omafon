@@ -6,7 +6,9 @@ Wants=dev-ttyAMA0.device
 [Service]
 Type=notify
 NotifyAccess=main
-ExecStart=/usr/bin/python3 -m omafon.main --config /etc/omafon/config.yaml
+# Wrapper wählt die aktive Version (/data/omafon/current nach App-Update, sonst /opt/omafon)
+# und schaltet nach drei Fehlstarts einer neuen Version zurück.
+ExecStart=/opt/omafon/systemd/omafon-start.sh
 WorkingDirectory=/opt/omafon
 User=omafon
 Group=omafon

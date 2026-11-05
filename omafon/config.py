@@ -64,6 +64,10 @@ class Config:
     fritz: dict = field(default_factory=dict)
     notify: dict = field(default_factory=dict)
     hybrid: dict = field(default_factory=dict)      # Schlüssel siehe omafon/hybrid.py
+    # Companion-App und Updates
+    admin: dict = field(default_factory=dict)       # enabled, port, bind, tls (omafon/admin.py)
+    update_url: str | None = None                   # Manifest des Update-Kanals
+    update_public_key: str | None = None            # Ed25519, Base64 (prüft die Signatur)
     phonebook: dict = field(default_factory=dict)   # Nummer -> Name (wird aus der Fritz!Box geladen)
     home_position: list[float] | None = None        # [Breite, Länge] für den Notruf-Hinweis, optional
     link_reminder_minutes: int = 10                  # Verbindung weg: Ansage wiederholen
@@ -111,7 +115,7 @@ def load(path: str | Path) -> Config:
     cc = str(raw.get("country_code", "49"))
     if raw.get("phonebook"):
         raw["phonebook"] = {normalize(str(k), cc): v for k, v in raw["phonebook"].items()}
-    for key in ("sip", "fritz", "notify", "hybrid"):
+    for key in ("sip", "fritz", "notify", "hybrid", "admin"):
         if raw.get(key) is None:
             raw.pop(key, None)
     if raw.get("dock_in_call", "ignore") not in ("ignore", "hangup", "handsfree"):

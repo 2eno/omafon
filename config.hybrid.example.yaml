@@ -114,3 +114,15 @@ dictation_max_s: 40
 serial_port: /dev/ttyAMA0      # SIM7600-HAT
 serial_baud: 115200
 data_dir: /data/omafon
+
+# --- Omafon-App (Android) -------------------------------------------------
+# Verwaltung im Heimnetz (HTTPS, selbst signiert; die App merkt sich das Zertifikat).
+# Koppeln: am Omafon die Raute-Taste lang drücken, Code in der App eingeben.
+admin:
+  enabled: true
+  port: 8443
+# Updates über die App: Manifest-URL und öffentlicher Schlüssel aus
+#   python3 -m tools.make_release keygen <ordner>
+# Leer lassen = keine Updates.
+update_url: null
+update_public_key: null

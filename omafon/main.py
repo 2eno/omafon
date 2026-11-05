@@ -11,6 +11,7 @@ import socket
 import sys
 import threading
 
+from . import __version__
 from . import config as config_mod
 from .phone import Phone
 from .telephony import create_backend
@@ -117,7 +118,18 @@ def sim_console(loop, events, hw, modem, stt) -> None:
 
 
 async def amain(args) -> None:
-    cfg = config_mod.load(args.config)
+    config_path = args.config
+    if args.sim and args.admin:
+        # Die App darf in der Simulation nicht die Vorlage im Repository ändern
+        import shutil
+        from pathlib import Path
+        data = Path(args.data or "./sim-data")
+        data.mkdir(parents=True, exist_ok=True)
+        copy = data / "config.yaml"
+        if not copy.exists():
+            shutil.copy(args.config, copy)
+        config_path = str(copy)
+    cfg = config_mod.load(config_path)
     loop = asyncio.get_running_loop()
     events: asyncio.Queue = asyncio.Queue()
     if args.sim:
@@ -145,7 +157,36 @@ async def amain(args) -> None:
         await modem.start()
         stt = Recognizer(cfg)
     phone = Phone(cfg, audio, modem, stt, hw, events)
-    await asyncio.gather(phone.run(), ticker(events), watchdog(phone))
+    tasks = [phone.run(), ticker(events), watchdog(phone)]
+
+    # Updates (A/B mit Rückfall) und Companion-App
+    from .update import CONFIRM_AFTER_S, Updater
+    updater = Updater(cfg.data_dir, __version__, cfg.update_url, cfg.update_public_key)
+    admin_opts = getattr(cfg, "admin", None) or {}
+    if admin_opts.get("enabled", True) and (not args.sim or args.admin):
+        from .admin import AdminServer
+        if args.sim and args.admin_port:
+            cfg.admin = {**admin_opts, "port": args.admin_port}
+        admin = AdminServer(cfg, config_path, phone, updater)
+        try:
+            await admin.start()
+            phone.admin = admin
+        except OSError as e:          # Port belegt, openssl fehlt …: Telefon läuft trotzdem
+            log.error("Verwaltung nicht gestartet: %s", e)
+
+    async def confirm_update():
+        await asyncio.sleep(CONFIRM_AFTER_S)
+        updater.confirm()             # neue Version lief stabil -> kein Rückfall mehr
+
+    tasks.append(confirm_update())
+    runner = asyncio.gather(*tasks)
+    restart = asyncio.create_task(phone.restart_event.wait())
+    await asyncio.wait({runner, restart}, return_when=asyncio.FIRST_COMPLETED)
+    if restart.done():
+        log.info("Neustart angefordert – systemd startet Omafon neu")
+        runner.cancel()
+        sys.exit(0)
+    await runner
 
 
 def main() -> None:
@@ -153,6 +194,8 @@ def main() -> None:
     ap.add_argument("--config", default="/etc/omafon/config.yaml")
     ap.add_argument("--sim", action="store_true", help="ohne Hardware am PC testen")
     ap.add_argument("--data", help="Datenordner (Simulation)")
+    ap.add_argument("--admin", action="store_true", help="Simulation: Verwaltung für die App einschalten")
+    ap.add_argument("--admin-port", type=int, default=0, help="Simulation: Port der Verwaltung")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,

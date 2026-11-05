@@ -1,0 +1,13 @@
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<!-- Damit die Omafon-App das Telefon im WLAN findet.
+     Installieren: sudo cp systemd/omafon.avahi.xml /etc/avahi/services/omafon.service
+     Port wie admin.port in config.yaml. -->
+<service-group>
+  <name replace-wildcards="yes">Omafon auf %h</name>
+  <service>
+    <type>_omafon._tcp</type>
+    <port>8443</port>
+    <txt-record>api=1</txt-record>
+  </service>
+</service-group>

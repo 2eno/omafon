@@ -91,6 +91,14 @@ P = {
     "network_ok": "Telefonieren geht wieder.",
     "mode_home": "Zu Hause. Telefon über die Fritzbox.",
     "mode_mobile": "Unterwegs. Telefon über Mobilfunk.",
+    # Companion-App
+    "pair_intro": "Kopplungscode für die Omafon-App:",
+    "pair_again": "Noch einmal:",
+    "pair_done": "Die App ist jetzt verbunden.",
+    "pair_off": "Die App-Verbindung ist ausgeschaltet.",
+    "settings_restart": "Neue Einstellungen. Das Telefon startet kurz neu.",
+    "update_restart": "Neue Version. Das Telefon startet kurz neu.",
+    "update_failed": "Das Update hat nicht geklappt. Die bisherige Version läuft weiter.",
 }
 
 
@@ -135,6 +143,10 @@ class Phone:
         self.modem_failures = 0
         self.ticks = 0
         self.link_reminder: dt.datetime | None = None    # Verbindung weg: nächste Erinnerung
+        self.admin = None                    # AdminServer (Companion-App), setzt main.py
+        self.restart_reason: str | None = None
+        self.restart_event = asyncio.Event()
+        self.pause_s = 1.0               # Pause zwischen Wiederholungen (Tests: kürzer)
 
     # ================================================================ Grundlagen
     def _load(self, name, default):
@@ -248,6 +260,8 @@ class Phone:
         await handler(k, kind)
 
     async def key_idle(self, k, kind):
+        if k == "#" and kind == "long":                  # Companion-App koppeln
+            return self.start_job(self.pair_job())
         if k in DIGITS:
             if kind == "long" and k in "123456789":
                 c = self.cfg.by_speed_dial(int(k))
@@ -886,8 +900,44 @@ class Phone:
         await self.audio.say(" ".join(parts))
 
     # ================================================================ Sekundentakt
+    # ================================================================ Companion-App
+    def idle(self) -> bool:
+        return self.state == S.IDLE and not (self.job and not self.job.done()) and self.call is None
+
+    def speak_key(self, key: str) -> None:
+        self.speak(P[key])
+
+    def paired(self, name: str) -> None:
+        self.speak(P["pair_done"])
+
+    async def pair_job(self) -> None:
+        if self.admin is None:
+            return await self.audio.say(P["pair_off"])
+        code = self.admin.open_pairing()
+        digits = ", ".join(DIGIT_WORDS[d] for d in code)
+        await self.audio.say(f"{P['pair_intro']} {digits}.")
+        await asyncio.sleep(self.pause_s)
+        await self.audio.say(f"{P['pair_again']} {digits}.")
+
+    def request_restart(self, phrase_key: str) -> None:
+        """Neustart (neue Einstellungen/Version) – erst, wenn das Telefon in Ruhe ist."""
+        self.restart_reason = phrase_key
+        self._try_restart()
+
+    def _try_restart(self) -> None:
+        if not self.restart_reason or self.restart_event.is_set() or not self.idle():
+            return
+        key, self.restart_reason = self.restart_reason, None
+
+        async def go():
+            await self.audio.say(P[key])
+            await asyncio.sleep(1.5 * self.pause_s)
+            self.restart_event.set()
+        self.bg(go())
+
     async def on_tick(self) -> None:
         self.ticks += 1
+        self._try_restart()
         now = self.now()
         idle_s = (now - self.last_activity).total_seconds()
         if self.state == S.ENTRY and idle_s > self.cfg.entry_timeout_s:

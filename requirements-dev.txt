@@ -3,3 +3,5 @@
 # (pyserial, smbus2, gpiozero, vosk) werden erst auf dem Pi importiert.
 # Wer alles installieren will:  pip install -r requirements.txt -r requirements-dev.txt
 pyyaml>=6.0
+# Update-Signaturen (Ed25519); auf dem Pi: sudo apt install python3-cryptography
+cryptography>=41

@@ -7,3 +7,5 @@ gpiozero>=2.0
 vosk>=0.3.45
 # Nur Festnetz-Variante (backend: sip); baresip selbst per apt: sudo apt install baresip ffmpeg
 fritzconnection>=1.13
+# Signierte Updates über die Omafon-App (apt: python3-cryptography)
+cryptography>=41
