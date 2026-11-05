@@ -84,18 +84,41 @@ class Hardware:
     def __init__(self, cfg, events: asyncio.Queue, loop: asyncio.AbstractEventLoop):
         from gpiozero import Button, DigitalOutputDevice, PWMOutputDevice
         from smbus2 import SMBus
-        self.bus = SMBus(1)
         self.loop, self.events = loop, events
-        # MCP23017 (0x20): alle Pins Eingang mit Pull-up
-        for reg in (0x00, 0x01, 0x0C, 0x0D):
-            self.bus.write_byte_data(0x20, reg, 0xFF)
+        # Notruf zuerst: die Pi-Eingänge dürfen nie an I²C scheitern (Regel 2)
         self.inputs = [(Button(pin, pull_up=True, bounce_time=None), key, inv)
                        for pin, key, inv in PI_INPUTS]
+        try:
+            self.bus = SMBus(1)
+        except OSError as e:
+            log.error("I²C-Bus nicht verfügbar: %s – nur Notruf und Seitentasten", e)
+            self.bus = None
+        self.mcp_ok = self._init_mcp()
         self.vibra = PWMOutputDevice(PIN_VIBRA)
         self.led = DigitalOutputDevice(PIN_LED)
         self.modem_pwr = DigitalOutputDevice(PIN_MODEM_PWR)
         self.tracker = KeyTracker(self._post, cfg.long_press_s, {"SOS": cfg.sos_hold_s})
+        self._stop = threading.Event()
         threading.Thread(target=self._poll, daemon=True, name="keys").start()
+
+    def close(self) -> None:
+        self._stop.set()
+
+    def _init_mcp(self) -> bool:
+        """MCP23017 (0x20): alle Pins Eingang mit Pull-up. Nach einem Ausfall
+        (Wackelkontakt, Spannungseinbruch) erneut aufrufen – ein Reset löscht
+        die Pull-ups, dann gälten alle Tasten als gedrückt."""
+        if self.bus is None:
+            return False
+        try:
+            for reg in (0x00, 0x01, 0x0C, 0x0D):
+                self.bus.write_byte_data(0x20, reg, 0xFF)
+            return True
+        except OSError as e:
+            if not getattr(self, "_mcp_logged", False):     # nicht jede Sekunde ins Log
+                self._mcp_logged = True
+                log.error("MCP23017 nicht ansprechbar: %s", e)
+            return False
 
     def _post(self, ev: KeyEvent) -> None:
         log.debug("Taste %s %s", ev.key, ev.kind)
@@ -103,21 +126,33 @@ class Hardware:
 
     def _poll(self) -> None:
         errors = 0
-        while True:
+        while not self._stop.is_set():
             now = time.monotonic()
+            for btn, key, inv in self.inputs:  # zuerst: SOS geht auch ohne I²C
+                try:
+                    self.tracker.update(key, btn.is_pressed != inv, now)
+                except Exception:              # nie die Abfrageschleife verlieren
+                    log.exception("Eingang %s", key)
             try:
+                if not self.mcp_ok:
+                    if errors % 100 == 0:           # etwa jede Sekunde neu versuchen
+                        self.mcp_ok = self._init_mcp()
+                    if not self.mcp_ok:
+                        raise OSError("MCP23017 nicht eingerichtet")
                 a = self.bus.read_byte_data(0x20, 0x12)
                 b = self.bus.read_byte_data(0x20, 0x13)
+                if errors >= 50:
+                    log.warning("MCP23017 antwortet wieder")
+                errors = 0
                 bits = a | (b << 8)
                 for i, key in enumerate(MCP_KEYS):
                     self.tracker.update(key, not (bits >> i) & 1, now)
-                errors = 0
             except OSError:
                 errors += 1
                 if errors == 50:
                     log.error("MCP23017 antwortet nicht – Ziffernblock ausgefallen")
-            for btn, key, inv in self.inputs:  # SOS bleibt auch ohne I²C funktionsfähig
-                self.tracker.update(key, btn.is_pressed != inv, now)
+                if errors >= 50:
+                    self.mcp_ok = False             # nach Rückkehr Pull-ups neu setzen
             time.sleep(0.01)
 
     # ------------------------------------------------------------ Ausgänge
@@ -129,6 +164,8 @@ class Hardware:
 
     def battery_percent(self) -> int | None:
         """MAX17048 (0x36), Register 0x04 = SOC, High-Byte in Prozent."""
+        if self.bus is None:
+            return None
         try:
             hi, lo = self.bus.read_i2c_block_data(0x36, 0x04, 2)
             return max(0, min(100, round(hi + lo / 256)))

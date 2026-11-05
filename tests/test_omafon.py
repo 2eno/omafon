@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from omafon import config, pdu
 from omafon.audio import SimAudio
 from omafon.hardware import KeyEvent, KeyTracker, SimHardware
-from omafon.modem import ModemEvent, SimModem
+from omafon.modem import SimModem
 from omafon.numbers import normalize, spoken_number
 from omafon.phone import P, S, Phone
 from omafon.stt import SimRecognizer
@@ -51,6 +51,13 @@ class PduTests(unittest.TestCase):
         parts = [pdu.decode_deliver(p) for p in pdu.build_deliver("+4917012", longu)]
         self.assertGreater(len(parts), 1)
         self.assertEqual("".join(p.text for p in parts), longu)
+
+    def test_address_is_cleaned_and_keeps_star_hash(self):
+        (s,) = pdu.encode_submit("0171 / 123-45 67", "x")
+        self.assertIn(pdu.encode_address("01711234567").hex().upper(), s.pdu_hex)
+        self.assertEqual(pdu.decode_address(pdu.encode_address("*31#0171"), 0)[0], "*31#0171")
+        with self.assertRaises(ValueError):
+            pdu.encode_address("Peter")
 
     def test_submit_lengths(self):
         (s,) = pdu.encode_submit("+491711234567", "Test")
@@ -371,6 +378,187 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.modem.sent), 1)
         self.assertTrue(self.modem.sent[0][1].startswith("Omafon: Akku 80%"))
         self.assertEqual(self.phone.inbox, [])
+
+    async def test_sms_arriving_while_reading_keeps_position(self):
+        self.modem.inject_sms("+491711234567", "Erste von Peter")
+        self.modem.inject_sms("+491609876543", "Zweite von Maria")
+        await self.pump()
+        await self.press("MSG")
+        self.assertIn("Erste von Peter", self.said())
+        self.modem.inject_sms("+491525550000", "Neu vom Enkel")   # rückt im Posteingang vorn ein
+        await self.pump()
+        await self.press("CALL")                                  # zurückrufen: immer noch Peter
+        self.assertIn("ATD+491711234567;", self.modem.log)
+
+    async def test_sos_while_ringing_stops_ringing(self):
+        self.modem.inject_call("+491711234567")
+        await self.pump()
+        self.assertIsNotNone(self.phone.ring_task)
+        self.phone.on_sos_key("SOS", "long")
+        await self.pump_until(lambda: self.phone.state == S.SOS)
+        await self.pump()
+        self.assertIsNone(self.phone.ring_task)
+        self.assertIn("AT+CHUP", self.modem.log)                 # Anruf abgewiesen
+        await self.press("HANGUP")                                 # Notruf abbrechen
+
+    async def test_restart_waits_if_call_comes_during_announcement(self):
+        self.phone.pause_s = 0.05
+        self.phone.request_restart("settings_restart")
+        self.modem.inject_call("+491711234567")
+        await self.pump(40)
+        self.assertFalse(self.phone.restart_event.is_set())      # nie während es klingelt
+        self.assertEqual(self.phone.restart_reason, "settings_restart")
+
+    async def test_dead_modem_is_announced_once_then_retried_quietly(self):
+        self.modem.fail_alive = True
+        for _ in range(3):
+            await self.phone.check_modem()
+        await self.pump(2)
+        self.assertEqual(self.said().count(P["modem_dead"]), 1)
+        self.assertIn("Modem neu gestartet", self.hw.log)
+        for _ in range(9):                                         # weitere Minuten: still
+            await self.phone.check_modem()
+        await self.pump(2)
+        self.assertEqual(self.said().count(P["modem_restart"]), 1)
+        self.clock += dt.timedelta(minutes=31)
+        self.modem.fail_alive = False
+        await self.phone.check_modem()
+        await self.pump(2)
+        self.assertIn(P["network_ok"], self.said())
+
+    async def test_missed_calls_list_is_bounded(self):
+        for i in range(25):
+            self.phone.call = None
+            self.modem.inject_call(f"+4930123{i:03}")
+            await self.pump(2)
+            self.modem.inject("missed")
+            await self.pump(2)
+        self.assertEqual(len(self.phone.missed), 20)
+
+    def test_texts_are_in_p_dict(self):
+        """Regel 3: feste Ansagen nur in P (sonst fehlen sie im WAV-Cache)."""
+        import re
+        src = (Path(__file__).resolve().parents[1] / "omafon" / "phone.py").read_text(encoding="utf-8")
+        body = src.split("class Phone", 1)[1]
+        fixed = re.findall(r'(?:say|speak)\("([^"{]+)"\)', body)
+        self.assertEqual(fixed, [], f"Feste Texte außerhalb von P: {fixed}")
+
+
+class HardwareTests(unittest.IsolatedAsyncioTestCase):
+    """Regel 2: fällt der MCP23017 aus (auch schon beim Start), geht der Notruf."""
+
+    async def test_sos_works_without_i2c(self):
+        import types
+        pressed = {"SOS": False}
+
+        class Button:
+            def __init__(self, pin, pull_up=True, bounce_time=None):
+                self.pin = pin
+
+            @property
+            def is_pressed(self):
+                return self.pin == 22 and pressed["SOS"]
+
+        class Out:
+            def __init__(self, pin): self.value = 0
+            def on(self): pass
+            def off(self): pass
+
+        class DeadBus:
+            def __init__(self, n): pass
+            def write_byte_data(self, *a): raise OSError(121, "Remote I/O error")
+            def read_byte_data(self, *a): raise OSError(121, "Remote I/O error")
+            def read_i2c_block_data(self, *a): raise OSError(121, "Remote I/O error")
+
+        fake = {"gpiozero": types.SimpleNamespace(Button=Button, DigitalOutputDevice=Out,
+                                                   PWMOutputDevice=Out),
+                "smbus2": types.SimpleNamespace(SMBus=DeadBus)}
+        saved = {k: sys.modules.get(k) for k in fake}
+        sys.modules.update(fake)
+        try:
+            from omafon.hardware import Hardware
+            cfg = config.load(CFG)
+            cfg.sos_hold_s = 0.2
+            q = asyncio.Queue()
+            hw = Hardware(cfg, q, asyncio.get_running_loop())   # darf nicht abstürzen
+            self.addCleanup(hw.close)
+            self.assertFalse(hw.mcp_ok)
+            self.assertIsNone(hw.battery_percent())
+            pressed["SOS"] = True
+            kinds = []
+            for _ in range(100):
+                await asyncio.sleep(0.01)
+                while not q.empty():
+                    ev = q.get_nowait()
+                    if ev.key == "SOS":
+                        kinds.append(ev.kind)
+                if "long" in kinds:
+                    break
+            self.assertEqual(kinds[:2], ["down", "long"])
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    sys.modules.pop(k, None)
+                else:
+                    sys.modules[k] = v
+
+
+class AudioTests(unittest.IsolatedAsyncioTestCase):
+    async def test_newer_announcement_drops_queued_ones(self):
+        from omafon.audio import Audio
+        with tempfile.TemporaryDirectory() as d:
+            cfg = config.load(CFG)
+            cfg.cache_dir = d
+            audio = Audio(cfg)
+            started = []
+
+            class Proc:
+                returncode = None
+                async def wait(self):
+                    await asyncio.sleep(0.05)
+                    self.returncode = 0
+                def terminate(self): self.returncode = -15
+                def kill(self): pass
+
+            async def fake_exec(*cmd, **kw):
+                started.append(cmd[-1])
+                return Proc()
+
+            orig = asyncio.create_subprocess_exec
+            asyncio.create_subprocess_exec = fake_exec
+            try:
+                async def synth(text):
+                    return Path(d) / f"{text}.wav"
+                audio.synth = synth
+                first = asyncio.create_task(audio.say("eins"))
+                await asyncio.sleep(0.01)
+                queued = [asyncio.create_task(audio.say(w, interrupt=False)) for w in ("zwo", "drei")]
+                await asyncio.sleep(0.01)
+                await audio.say("Abgebrochen.")               # unterbricht – Rest entfällt
+                await asyncio.gather(first, *queued)
+            finally:
+                asyncio.create_subprocess_exec = orig
+            names = [Path(p).stem for p in started]
+            self.assertEqual(names[0], "eins")
+            self.assertEqual(names[-1], "Abgebrochen.")
+            self.assertNotIn("drei", names)
+
+    async def test_missing_player_does_not_crash(self):
+        from omafon.audio import Audio
+        with tempfile.TemporaryDirectory() as d:
+            cfg = config.load(CFG)
+            cfg.cache_dir = d
+
+            async def no_exec(*a, **k):
+                raise FileNotFoundError("aplay")
+            orig = asyncio.create_subprocess_exec
+            asyncio.create_subprocess_exec = no_exec
+            try:
+                audio = Audio(cfg)
+                with self.assertLogs("omafon.audio", "ERROR"):
+                    await audio.play(Path(d) / "x.wav")
+            finally:
+                asyncio.create_subprocess_exec = orig
 
 
 if __name__ == "__main__":

@@ -201,12 +201,16 @@ async def amain(args) -> None:
         try:
             await admin.start()
             phone.admin = admin
-        except OSError as e:          # Port belegt, openssl fehlt …: Telefon läuft trotzdem
-            log.error("Verwaltung nicht gestartet: %s", e)
+        except Exception as e:        # Port belegt, openssl fehlt …: Telefon läuft trotzdem
+            log.error("Verwaltung nicht gestartet: %r", e)
 
     async def confirm_update():
+        start = phone.ticks
         await asyncio.sleep(CONFIRM_AFTER_S)
-        updater.confirm()             # neue Version lief stabil -> kein Rückfall mehr
+        if phone.ticks - start >= CONFIRM_AFTER_S // 2:   # Hauptschleife lief wirklich
+            updater.confirm()         # neue Version lief stabil -> kein Rückfall mehr
+        else:
+            log.error("Hauptschleife hängt – Version wird nicht bestätigt")
 
     tasks.append(confirm_update())
     runner = asyncio.gather(*tasks)

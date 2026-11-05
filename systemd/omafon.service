@@ -2,6 +2,9 @@
 Description=Omafon – sprechendes Telefon
 After=sound.target dev-ttyAMA0.device
 Wants=dev-ttyAMA0.device
+# Ein Telefon gibt nie auf: kein Startlimit (sonst bliebe es nach ein paar
+# schnellen Abstürzen, z. B. kaputtes Update vor dem Rückfall, für immer aus)
+StartLimitIntervalSec=0
 
 [Service]
 Type=notify

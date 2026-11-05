@@ -183,6 +183,7 @@ class BaresipBackend(TelephonyBackend):
         self._tasks: list[asyncio.Task] = []
         self._ring_task: asyncio.Task | None = None
         self.in_call = False
+        self.call_id: str | None = None   # baresip-ID des Gesprächs, das Phone gehört
         self.store: dict[int, VoiceMessage] = {}
         self._next_idx = 0
         self._seen: set[tuple] = set()
@@ -267,7 +268,9 @@ class BaresipBackend(TelephonyBackend):
             try:
                 self.reader, self.writer = await asyncio.open_connection(self.host, self.port)
                 self.connected = True
-                self._tasks.append(asyncio.create_task(self._read_loop(), name="sip-reader"))
+                t = asyncio.create_task(self._read_loop(), name="sip-reader")
+                self._tasks.append(t)
+                t.add_done_callback(lambda t: self._tasks.remove(t) if t in self._tasks else None)
                 log.info("ctrl_tcp verbunden")
                 # Registrierungsstand ist unbekannt -> neu registrieren lassen
                 try:
@@ -315,12 +318,21 @@ class BaresipBackend(TelephonyBackend):
             log.warning("ctrl_tcp getrennt: %r", e)
         finally:
             self.connected = False
+            self.registered = False              # nach dem Neuverbinden erst REGISTER_OK abwarten
+            if self.writer:
+                self.writer.close()
             for fut in self._pending.values():
                 if not fut.done():
                     fut.set_exception(ConnectionError("getrennt"))
             if self.in_call:                     # Gespräch ist mit baresip weg
                 self._call_over("call_end")
             self._link_changed()
+
+    def _foreign(self, ev: dict) -> bool:
+        """Gehört das Ereignis zu einem anderen Gespräch als dem von Phone
+        (z. B. ein abgewiesener Zweitanruf, der jetzt auflegt)?"""
+        cid = str(ev.get("id") or "")
+        return bool(cid and self.call_id and cid != self.call_id)
 
     async def _on_event(self, ev: dict) -> None:
         t = ev.get("type", "")
@@ -331,18 +343,31 @@ class BaresipBackend(TelephonyBackend):
             self.registered = False
             self._link_changed()
         elif t == "CALL_INCOMING":
-            if self.in_call:                      # Anklopfen: zweiten Anruf abweisen
+            if self.in_call:                      # kein Anklopfen: Zweitanruf nicht melden
+                log.info("Zweitanruf ignoriert (Gespräch läuft)")
                 return
             self.in_call = True
+            self.call_id = str(ev.get("id") or "") or None
             # Omafon klingelt selbst. Nicht hier warten: diese Schleife liest die Antwort.
             self._fire("stopringing")
             self._emit("ring")
             self._emit("clip", peer_number(ev.get("peeruri", "")))
             self._ring_task = asyncio.create_task(self._ring_repeat())
+        elif t == "CALL_OUTGOING":
+            if self.in_call and not self.call_id:
+                self.call_id = str(ev.get("id") or "") or None
         elif t == "CALL_ESTABLISHED":
+            if self._foreign(ev):
+                return
             self._stop_ring()
             self._emit("call_begin")
         elif t == "CALL_CLOSED":
+            if self._foreign(ev):
+                log.info("Zweitanruf beendet – laufendes Gespräch bleibt")
+                return
+            if not self.in_call:                  # schon von hier aus aufgelegt
+                self.call_id = None
+                return
             self._call_over(close_kind(ev.get("param", "")))
 
     def _fire(self, command: str, params: str = "") -> None:
@@ -359,6 +384,7 @@ class BaresipBackend(TelephonyBackend):
     def _call_over(self, kind: str) -> None:
         self._stop_ring()
         self.in_call = False
+        self.call_id = None
         self._emit(kind)
 
     async def _ring_repeat(self) -> None:
@@ -455,13 +481,13 @@ class BaresipBackend(TelephonyBackend):
 
     # ------------------------------------------------------------ Telefonie
     def _uri(self, number: str) -> str:
-        number = number.strip().replace(" ", "")
-        return f"sip:{number}@{self.sip['registrar']}"
+        number = re.sub(r"[^0-9+*#]", "", number)
+        return f"sip:{number.replace('#', '%23')}@{self.sip['registrar']}"   # '#' ist in URIs reserviert
 
     async def dial(self, number: str) -> None:
         if not self.online:
             raise ModemError("Keine Verbindung zur Fritz!Box")
-        self.in_call = True
+        self.in_call, self.call_id = True, None
         try:
             await self._send("dial", self._uri(number), timeout=10)
         except ModemError:
@@ -476,6 +502,7 @@ class BaresipBackend(TelephonyBackend):
         self._stop_ring()
         self.in_call = False
         await self._send("hangup")
+        self.call_id = None
 
     async def dtmf(self, digit: str) -> None:
         await self._send("sndcode", digit)

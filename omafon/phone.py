@@ -79,6 +79,8 @@ P = {
     "sos_nobody": "Ich habe niemanden erreicht. Alle Notfallkontakte haben eine SMS bekommen.",
     "modem_restart": "Das Mobilfunkteil startet neu. Bitte einen Moment warten.",
     "modem_dead": "Achtung, Telefonieren ist gerade nicht möglich.",
+    "error": "Es ist ein Fehler aufgetreten.",
+    "not_sent": "Nachricht wurde nicht gesendet.",
     # Festnetz (backend: sip)
     "link_lost": "Keine Verbindung zur Fritzbox. Ich versuche es weiter.",
     "link_ok": "Verbindung zur Fritzbox ist wieder da.",
@@ -130,7 +132,7 @@ class Phone:
         self.inbox: list[dict] = self._load("inbox.json", [])
         self.missed: list[dict] = self._load("missed.json", [])
         self.partial: dict[tuple, dict] = {}
-        self.playlist: list[int] = []
+        self.playlist: list[dict] = []     # Nachrichten selbst, nicht Indizes: neue SMS rücken vorn ein
         self.read_pos = 0
         self.next_news_signal: dt.datetime | None = None   # nächster Erinnerungs-Gong
         self.led_on = False
@@ -141,6 +143,8 @@ class Phone:
         self.sos_counting = False
         self.battery_warned: set[int] = set()
         self.modem_failures = 0
+        self.modem_retry_at: dt.datetime | None = None   # Modem tot: nächster stiller Versuch
+        self.modem_dead_announced = False
         self.ticks = 0
         self.link_reminder: dt.datetime | None = None    # Verbindung weg: nächste Erinnerung
         self.admin = None                    # AdminServer (Companion-App), setzt main.py
@@ -188,7 +192,7 @@ class Phone:
             raise
         except Exception:
             log.exception("Fehler im Ablauf")
-            await self.audio.say("Es ist ein Fehler aufgetreten.")
+            await self.audio.say(P["error"])
             self.go_idle()
 
     def go_idle(self) -> None:
@@ -361,14 +365,12 @@ class Phone:
     async def key_reading(self, k, kind):
         if k == "MSG":
             if kind == "long":
-                sender = self.inbox[self.playlist[self.read_pos]]["sender"]
-                return self.start_job(self.dictate_job(sender))
+                return self.start_job(self.dictate_job(self.current_message()["sender"]))
             self.start_job(self.read_job(start=False, step=1))
         elif k == "INFO":
             self.start_job(self.read_job(start=False, step=0))
         elif k == "CALL":
-            sender = self.inbox[self.playlist[self.read_pos]]["sender"]
-            self.start_job(self.call_job(sender))
+            self.start_job(self.call_job(self.current_message()["sender"]))
         elif k == "HANGUP":
             self.cancel_job()
             self.go_idle()
@@ -586,6 +588,7 @@ class Phone:
     async def end_call(self, phrase: str | None) -> None:
         call = self.call
         self.call = None
+        self.stop_ringing()                       # z. B. Notruf, während es klingelt
         try:
             await self.modem.hangup()
         except ModemError:
@@ -685,7 +688,8 @@ class Phone:
         if self.state == S.RINGING and not call.answered.is_set():
             self.stop_ringing()
             self.missed.append({"number": call.number, "time": self.now().isoformat(timespec="minutes")})
-            self._save("missed.json", self.missed[-20:])
+            del self.missed[:-20]
+            self._save("missed.json", self.missed)
             self.go_idle()
             self.speak(f"Verpasster Anruf von {self.name_or_number(call.number)}.")
         elif self.state == S.OUTGOING and not call.answered.is_set():
@@ -775,10 +779,13 @@ class Phone:
         except ModemError as e:
             log.error("Status-SMS: %s", e)
 
-    def build_playlist(self) -> list[int]:
-        unread = [i for i, m in enumerate(self.inbox) if not m["read"]]
-        read = [i for i, m in enumerate(self.inbox) if m["read"]]
+    def build_playlist(self) -> list[dict]:
+        unread = [m for m in self.inbox if not m["read"]]
+        read = [m for m in self.inbox if m["read"]]
         return list(reversed(unread)) + read      # Ungelesene älteste zuerst, dann der Rest
+
+    def current_message(self) -> dict:
+        return self.playlist[min(self.read_pos, len(self.playlist) - 1)]
 
     def when_words(self, iso: str) -> str:
         try:
@@ -806,7 +813,7 @@ class Phone:
                 return await self.audio.say(P["no_more"])
         self.state = S.READING
         self.audio.route("speaker")
-        m = self.inbox[self.playlist[self.read_pos]]
+        m = self.playlist[self.read_pos]
         new = not m["read"]
         m["read"] = True
         self._save("inbox.json", self.inbox)
@@ -934,7 +941,10 @@ class Phone:
         async def go():
             await self.audio.say(P[key])
             await asyncio.sleep(1.5 * self.pause_s)
-            self.restart_event.set()
+            if self.idle():
+                self.restart_event.set()
+            else:                                 # inzwischen klingelt es o. Ä.: später
+                self.restart_reason = self.restart_reason or key
         self.bg(go())
 
     async def on_tick(self) -> None:
@@ -947,7 +957,7 @@ class Phone:
             self.speak(P["entry_cleared"])
         elif self.state in (S.READING, S.CONFIRM) and idle_s > 90 and not (self.job and not self.job.done()):
             if self.state == S.CONFIRM:
-                self.speak("Nachricht wurde nicht gesendet.")
+                self.speak(P["not_sent"])
             self.go_idle()
         elif self.state == S.RINGING and (now - self.last_ring).total_seconds() > 8:
             await self.on_call_gone("missed")
@@ -982,17 +992,38 @@ class Phone:
                 break
 
     async def check_modem(self) -> None:
-        if self.state not in (S.IDLE, S.READING):
+        """Mobilfunkteil (nur Hybrid) hängt -> Strom aus/an und neu starten.
+        Bleibt es tot, einmal ansagen und dann nur noch still alle 30 Minuten
+        probieren – nicht alle drei Minuten dieselbe Ansage."""
+        if not getattr(self.modem, "has_modem", False) or self.state not in (S.IDLE, S.READING):
+            return
+        now = self.now()
+        if self.modem_retry_at and now < self.modem_retry_at:
             return
         if await self.modem.alive():
-            self.modem_failures = 0
+            self._modem_back()
             return
         self.modem_failures += 1
-        if self.modem_failures == 3:
+        if self.modem_failures < 3:
+            return
+        self.modem_failures = 0
+        if not self.modem_dead_announced:
             self.speak(P["modem_restart"])
-            await self.hw.modem_power_cycle()
-            try:
-                await self.modem.start()
-                self.modem_failures = 0
-            except ModemError:
-                self.speak(P["modem_dead"])
+        await self.hw.modem_power_cycle()
+        try:
+            await self.modem.start()
+        except ModemError as e:
+            log.error("Modem-Neustart: %s", e)
+        if await self.modem.alive():
+            self._modem_back()
+            return
+        self.modem_retry_at = now + dt.timedelta(minutes=30)
+        if not self.modem_dead_announced:
+            self.modem_dead_announced = True
+            self.speak(P["modem_dead"])
+
+    def _modem_back(self) -> None:
+        self.modem_failures, self.modem_retry_at = 0, None
+        if self.modem_dead_announced:
+            self.modem_dead_announced = False
+            self.speak(P["network_ok"])

@@ -144,6 +144,25 @@ class NotifierTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ModemError):
             await n.send_to_number("+491525550000", "x")
 
+    async def test_smtps_port_465(self):
+        cfg = config.load(CFG)
+        cfg.notify = {"enabled": True, "smtp_host": "smtp.example.org", "smtp_port": 465,
+                      "smtp_user": "u", "smtp_password": "p"}
+        cfg.contacts[0].email = "peter@example.org"
+        used = []
+
+        class Conn:
+            def __init__(self, *a, **kw): used.append(kw.get("context") is not None)
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def starttls(self, **kw): raise AssertionError("kein STARTTLS bei Port 465")
+            def login(self, *a): pass
+            def send_message(self, m): used.append(m["To"])
+
+        n = Notifier(cfg, smtp_factory=Conn, smtp_ssl_factory=Conn)
+        await n.send_to_number("+491711234567", "Test.")
+        self.assertEqual(used, [True, "peter@example.org"])
+
     async def test_disabled_by_default(self):
         n = Notifier(config.load(CFG))
         self.assertFalse(n.enabled)
@@ -192,6 +211,31 @@ class Base(unittest.IsolatedAsyncioTestCase):
 
 
 class BackendTests(Base):
+    async def test_second_call_hanging_up_does_not_end_current_call(self):
+        self.drain()
+        await self.sim.server.incoming("+491711234567")
+        self.assertTrue(await self.until(lambda: self.q.qsize() >= 2))
+        await self.backend.answer()
+        self.assertTrue(await self.until(lambda: ("call_begin", "") in self.drain()))
+        await self.sim.server.incoming("+491609876543")          # Zweitanruf (kein Anklopfen)
+        await self.sim.server.event("CALL_CLOSED", "Connection reset by peer")  # gibt auf
+        await asyncio.sleep(0.1)
+        self.assertEqual([e for e in self.drain() if e[0] != "ring"], [])
+        self.assertTrue(self.backend.in_call)                     # Gespräch läuft weiter
+        self.sim.server.call_id -= 1                              # jetzt legt der erste auf
+        await self.sim.server.event("CALL_CLOSED", "Connection reset by peer")
+        self.assertTrue(await self.until(lambda: not self.q.empty()))
+        self.assertEqual(self.drain(), [("call_end", "")])
+
+    async def test_hash_in_number_is_escaped(self):
+        await self.backend.dial("*31# 0301234")
+        self.assertIn(("dial", "sip:*31%230301234@fritz.box"), self.sim.server.commands)
+
+    async def test_reconnect_waits_for_registration(self):
+        await self.sim.server.drop_connection()
+        self.assertTrue(await self.until(lambda: not self.backend.connected))
+        self.assertFalse(self.backend.registered)
+
     async def test_dial_answer_dtmf_hangup(self):
         await self.backend.dial("0301234")
         self.assertIn(("dial", "sip:0301234@fritz.box"), self.sim.server.commands)

@@ -360,7 +360,14 @@ class AdminServer:
         h = _hash(auth[7:].strip())
         for c in self.clients:
             if secrets.compare_digest(c.token_hash, h):
-                c.last_seen = dt.datetime.now().isoformat(timespec="seconds")
+                now = dt.datetime.now().isoformat(timespec="seconds")
+                stale = c.last_seen[:15] != now[:15]     # höchstens alle 10 Minuten speichern
+                c.last_seen = now
+                if stale:
+                    try:
+                        self._save_clients()
+                    except OSError as e:
+                        log.warning("clients.json: %s", e)
                 return c
         raise ApiError(401, "Unbekannte App – bitte neu koppeln")
 
@@ -404,6 +411,8 @@ class AdminServer:
                 item["value"] = s.default if v is None else v
                 if s.type == "hours" and isinstance(item["value"], tuple):
                     item["value"] = list(item["value"])
+                if s.type == "choice" and isinstance(item["value"], bool):
+                    item["value"] = "on" if item["value"] else "off"   # YAML: on/off ohne Anführungszeichen
             groups.setdefault(s.group, []).append(item)
         return {"variant": variant, "groups": [{"title": t, "items": i} for t, i in groups.items()]}
 
@@ -461,8 +470,13 @@ class AdminServer:
             self.phone.request_restart(phrase_key)
 
     # ------------------------------------------------------------ Updates
+    def _update_idle(self) -> None:
+        if self.updater.state.phase not in ("idle", "error"):
+            raise ApiError(409, "Update läuft gerade")
+
     async def update_check(self) -> dict:
         from .update import UpdateError
+        self._update_idle()
         try:
             return await asyncio.get_running_loop().run_in_executor(None, self.updater.check)
         except UpdateError as e:
@@ -492,6 +506,7 @@ class AdminServer:
 
     def update_rollback(self) -> dict:
         from .update import UpdateError
+        self._update_idle()
         try:
             self.updater.rollback()
         except UpdateError as e:

@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from omafon import __version__, config
 from omafon.admin import AdminServer, ApiError, validate_contacts
 from omafon.audio import SimAudio
-from omafon.hardware import KeyEvent, SimHardware
+from omafon.hardware import SimHardware
 from omafon.modem import SimModem
 from omafon.phone import P, Phone
 from omafon.stt import SimRecognizer
@@ -371,6 +371,41 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual(up3.rollback(), "9.9.0")
         self.assertEqual((self.data / "current").resolve().name, "9.9.0")
 
+    def test_no_downgrade_and_strict_manifest(self):
+        self.publish("0.1.0")                                 # altes, echt signiertes Manifest
+        up = self.updater()
+        up.check()
+        with self.assertRaises(UpdateError) as e:
+            up.install()
+        self.assertIn("nicht neuer", str(e.exception))
+        for bad in ("@basis", "../9.9", "9.9/x", ""):
+            m = {"version": bad, "url": "https://example.invalid/p.tar.gz", "sha256": "0" * 64, "notes": ""}
+            m["signature"] = base64.b64encode(self.key.sign(canonical(m))).decode()
+            self.files["https://example.invalid/manifest.json"] = json.dumps(m).encode()
+            with self.assertRaises(UpdateError):
+                self.updater().check()
+
+    def test_missing_key_is_a_clean_error(self):
+        self.publish("9.9.0")
+        up = self.updater()
+        up.check()
+        up.public_key = None                                  # Schlüssel aus der Konfiguration entfernt
+        with self.assertRaises(UpdateError):
+            up.install()
+
+    def test_package_size_is_limited(self):
+        import omafon.update as upd
+        self.publish("9.9.0")
+        up = self.updater()
+        up.check()
+        old, upd.MAX_PACKAGE = upd.MAX_PACKAGE, 100
+        try:
+            with self.assertRaises(UpdateError) as e:
+                up.install()
+        finally:
+            upd.MAX_PACKAGE = old
+        self.assertIn("zu groß", str(e.exception))
+
     def test_rejects_bad_signature_checksum_and_unsafe_tar(self):
         self.publish("9.9.0", tamper={"version": "9.9.9"})  # Signatur passt nicht mehr
         with self.assertRaises(UpdateError):
@@ -412,6 +447,28 @@ class UpdateTests(unittest.TestCase):
     def test_not_configured(self):
         with self.assertRaises(UpdateError):
             Updater(self.data, __version__).check()
+
+
+class UpdateApiTests(AdminBase):
+    async def test_check_refused_while_installing(self):
+        up = Updater(self.cfg.data_dir, __version__)
+        self.admin.updater = up
+        up.state.phase = "downloading"
+        tok = self.token()
+        for path in ("/api/v1/update/check", "/api/v1/update/rollback"):
+            with self.assertRaises(ApiError) as e:
+                await self.admin.handle("POST", path, self.auth(tok), b"")
+            self.assertEqual(e.exception.status, 409)
+        self.assertEqual(up.state.phase, "downloading")          # Fortschritt nicht überschrieben
+
+    async def test_yaml_on_off_shown_as_choice(self):
+        raw = self.cfg_path.read_text(encoding="utf-8")
+        self.cfg_path.write_text(raw + "\nhybrid:\n  home_modem: off\n", encoding="utf-8")
+        self.cfg.backend = "hybrid"
+        text = self.cfg_path.read_text(encoding="utf-8").replace("backend: sip", "backend: hybrid")
+        self.cfg_path.write_text(text, encoding="utf-8")
+        items = {i["key"]: i for g in self.admin.settings()["groups"] for i in g["items"]}
+        self.assertEqual(items["hybrid.home_modem"]["value"], "off")
 
 
 class SavedConfigTests(unittest.TestCase):

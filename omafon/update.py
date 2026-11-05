@@ -26,12 +26,12 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
-import time
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -42,6 +42,8 @@ MAX_BOOTS = 3
 CONFIRM_AFTER_S = 120
 BASIS = "@basis"            # Erstinstallation unter /opt: Rückfall = Symlink entfernen
 MANIFEST_FIELDS = ("version", "url", "sha256", "notes")
+MAX_PACKAGE = 50 * 1024 * 1024   # Pakete enthalten nur Python-Code: alles darüber ist kaputt
+VERSION_RE = re.compile(r"^[0-9][0-9A-Za-z.+_-]{0,39}$")
 
 
 class UpdateError(Exception):
@@ -60,10 +62,15 @@ def verify_signature(manifest: dict, public_key_b64: str) -> None:
         from cryptography.exceptions import InvalidSignature
     except ImportError as e:   # auf dem Pi: apt install python3-cryptography
         raise UpdateError("python3-cryptography fehlt – Updates nicht möglich") from e
+    if not public_key_b64:
+        raise UpdateError("Kein öffentlicher Schlüssel (update_public_key) eingerichtet")
     try:
-        key = Ed25519PublicKey.from_public_bytes(base64.b64decode(public_key_b64))
-        key.verify(base64.b64decode(manifest.get("signature", "")), canonical(manifest))
-    except (InvalidSignature, ValueError) as e:
+        key = Ed25519PublicKey.from_public_bytes(base64.b64decode(public_key_b64, validate=True))
+    except (ValueError, TypeError) as e:
+        raise UpdateError("update_public_key ist kein gültiger Ed25519-Schlüssel") from e
+    try:
+        key.verify(base64.b64decode(str(manifest.get("signature", "")), validate=True), canonical(manifest))
+    except (InvalidSignature, ValueError, TypeError) as e:
         raise UpdateError("Signatur ungültig – Paket wird nicht installiert") from e
 
 
@@ -137,10 +144,13 @@ class Updater:
         try:
             with self._open(self.update_url, 20) as r:
                 manifest = json.loads(r.read().decode("utf-8"))
+            if not isinstance(manifest, dict):
+                raise UpdateError("Manifest ist kein JSON-Objekt")
             for k in ("version", "url", "sha256", "signature"):
-                if not manifest.get(k):
+                if not isinstance(manifest.get(k), str) or not manifest[k]:
                     raise UpdateError(f"Manifest unvollständig: {k} fehlt")
             verify_signature(manifest, self.public_key)
+            check_manifest(manifest)
             self.state.available = manifest
             self.state.last_error = ""
             return self.info()
@@ -162,9 +172,13 @@ class Updater:
         if not m:
             raise UpdateError("Erst nach Updates suchen")
         verify_signature(m, self.public_key)            # nicht auf den alten Stand verlassen
+        check_manifest(m)
         version = m["version"]
-        if "/" in version or version.startswith(".") or not version.strip():
-            raise UpdateError("Ungültige Versionsnummer im Manifest")
+        # Nie zurück auf eine ältere signierte Version: ein abgefangenes altes
+        # Manifest darf keine bekannte Lücke wieder einspielen. Zurück geht nur
+        # über rollback() auf die vorherige, schon installierte Version.
+        if version_tuple(version) <= version_tuple(self.version):
+            raise UpdateError(f"Version {version} ist nicht neuer als {self.version}")
         try:
             self.state.phase = "downloading"
             self.save()
@@ -172,8 +186,12 @@ class Updater:
             with tempfile.TemporaryDirectory(dir=self.data) as tmp:
                 pkg = Path(tmp) / "paket.tar.gz"
                 h = hashlib.sha256()
+                size = 0
                 with self._open(m["url"], 60) as r, open(pkg, "wb") as f:
                     while chunk := r.read(65536):
+                        size += len(chunk)
+                        if size > MAX_PACKAGE:
+                            raise UpdateError("Paket ist zu groß")
                         h.update(chunk)
                         f.write(chunk)
                 self.state.phase = "verifying"
@@ -183,7 +201,7 @@ class Updater:
                 safe_extract(pkg, staging)
                 if not (staging / "omafon" / "__init__.py").exists():
                     raise UpdateError("Paket enthält kein omafon/")
-                self.smoke_test(staging)
+                self.smoke_test(staging, version)
                 target = self.releases / version
                 if target.exists():
                     shutil.rmtree(target)
@@ -202,18 +220,23 @@ class Updater:
             self.state.phase, self.state.last_error = "error", str(e)
             self.save()
             raise
-        except (OSError, tarfile.TarError) as e:
+        except (OSError, tarfile.TarError, ValueError) as e:
             self.state.phase, self.state.last_error = "error", f"Installation fehlgeschlagen: {e}"
             self.save()
             raise UpdateError(self.state.last_error) from e
 
-    def smoke_test(self, root: Path) -> None:
-        r = subprocess.run([self.python, "-I", "-c", "import sys; sys.path.insert(0, '.'); "
-                            "import omafon.phone, omafon.main; print(omafon.__version__)"],
-                           cwd=root, capture_output=True, text=True, timeout=60)
+    def smoke_test(self, root: Path, version: str | None = None) -> None:
+        try:
+            r = subprocess.run([self.python, "-I", "-c", "import sys; sys.path.insert(0, '.'); "
+                                "import omafon.phone, omafon.main, omafon.update; print(omafon.__version__)"],
+                               cwd=root, capture_output=True, text=True, timeout=60)
+        except subprocess.TimeoutExpired as e:
+            raise UpdateError("Neue Version startet nicht (Importtest dauert zu lange)") from e
         if r.returncode != 0:
             raise UpdateError("Neue Version startet nicht (Importtest): "
                               + (r.stderr.strip().splitlines() or ["?"])[-1][:200])
+        if version is not None and r.stdout.strip() != version:
+            raise UpdateError(f"Paket meldet Version {r.stdout.strip() or '?'} statt {version}")
 
     def activate(self, version: str) -> None:
         if version == BASIS:                            # Wrapper startet dann /opt/omafon
@@ -270,6 +293,16 @@ class Updater:
         s.phase = "restarting"
         self.save()
         return s.current
+
+
+def check_manifest(m: dict) -> None:
+    """Felder, die als Pfad oder Prüfsumme benutzt werden, streng prüfen."""
+    if not VERSION_RE.match(m.get("version", "")):
+        raise UpdateError("Ungültige Versionsnummer im Manifest")
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", m.get("sha256", "")):
+        raise UpdateError("Ungültige Prüfsumme im Manifest")
+    if not str(m.get("url", "")).startswith(("https://", "http://")):
+        raise UpdateError("Ungültige Paket-Adresse im Manifest")
 
 
 def safe_extract(pkg: Path, dest: Path) -> None:

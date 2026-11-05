@@ -49,6 +49,7 @@ class HybridBackend(TelephonyBackend):
     name = "hybrid"
     has_link = True
     supports_sms = True
+    has_modem = True
     offline_key = "no_network"
 
     def __init__(self, cfg, events: asyncio.Queue, home, mobile, clock=time.monotonic):

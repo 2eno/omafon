@@ -31,6 +31,7 @@ class Modem(TelephonyBackend):
     """Mobilfunkteil des Hybridgeräts: SIM7600 mit SMS und GPS."""
     name = "sim7600"
     supports_sms = True
+    has_modem = True
 
     def __init__(self, port: str, baud: int, events: asyncio.Queue, loop: asyncio.AbstractEventLoop):
         self.port, self.baud = port, baud
@@ -48,8 +49,18 @@ class Modem(TelephonyBackend):
     # ------------------------------------------------------------ Verbindung
     async def start(self) -> None:
         import serial  # pyserial
-        self.ser = serial.Serial(self.port, self.baud, timeout=0.2)
-        threading.Thread(target=self._reader, daemon=True, name="modem-reader").start()
+        old, self.ser = self.ser, None
+        if old is not None:                   # Neustart: alte Verbindung samt Lesethread beenden
+            try:
+                old.close()
+            except Exception:
+                pass
+        try:
+            ser = serial.Serial(self.port, self.baud, timeout=0.2)
+        except (OSError, ValueError) as e:    # SerialException ist ein OSError
+            raise ModemError(f"Serielle Schnittstelle {self.port}: {e}") from e
+        self.ser = ser
+        threading.Thread(target=self._reader, args=(ser,), daemon=True, name="modem-reader").start()
         for _ in range(20):
             try:
                 await self.cmd("AT", timeout=1)
@@ -69,12 +80,14 @@ class Modem(TelephonyBackend):
         log.info("URC %s %s", ev.kind, ev.data)
         self.loop.call_soon_threadsafe(self.events.put_nowait, ev)
 
-    def _reader(self) -> None:
+    def _reader(self, ser) -> None:
         buf = b""
-        while True:
+        while ser is self.ser:                # endet, sobald start() neu verbunden hat
             try:
-                chunk = self.ser.read(256)
+                chunk = ser.read(256)
             except Exception as e:  # Kabel ab, Modem-Reset …
+                if ser is not self.ser:
+                    return
                 log.error("Serielle Schnittstelle: %s", e)
                 time.sleep(1)
                 continue
@@ -127,6 +140,8 @@ class Modem(TelephonyBackend):
     async def cmd(self, command: str, timeout: float = 5, prefix: str | None = None,
                   payload: str | None = None) -> list[str]:
         """Sendet einen AT-Befehl. payload: Daten nach dem '>'-Prompt (SMS)."""
+        if self.ser is None:
+            raise ModemError("Modem nicht verbunden")
         async with self._lock:
             self._resp, self._error = [], None
             self._done.clear()
@@ -136,7 +151,10 @@ class Modem(TelephonyBackend):
             self._busy = True
             try:
                 log.debug(">> %s", command)
-                self.ser.write((command + "\r").encode())
+                try:
+                    self.ser.write((command + "\r").encode())
+                except (OSError, AttributeError) as e:
+                    raise ModemError(f"Schreiben an das Modem: {e}") from e
                 if payload is not None:
                     ok = await self.loop.run_in_executor(None, self._prompt.wait, 10)
                     if not ok:
@@ -197,7 +215,11 @@ class Modem(TelephonyBackend):
 
     async def send_sms(self, number: str, text: str) -> None:
         self._ref = (self._ref + 1) % 256
-        for part in pdu.encode_submit(number, text, self._ref):
+        try:
+            parts = pdu.encode_submit(number, text, self._ref)
+        except ValueError as e:
+            raise ModemError(f"SMS an {number!r}: {e}") from e
+        for part in parts:
             await self.cmd(f"AT+CMGS={part.tpdu_len}", timeout=60,
                            prefix="+CMGS", payload=part.pdu_hex)
 
@@ -246,6 +268,7 @@ class SimModem(TelephonyBackend):
     """Ersatz-Modem für PC und Tests. Ereignisse kommen aus inject_*()."""
     name = "sim7600"
     supports_sms = True
+    has_modem = True
 
     def __init__(self, events: asyncio.Queue, echo: bool = True):
         self.events, self.echo = events, echo
@@ -281,7 +304,7 @@ class SimModem(TelephonyBackend):
         self.radio = on
         self._say(f"AT+CFUN={1 if on else 4}")
     async def alive(self): return not self.fail_alive
-    async def gps_position(self, timeout=30): return (49.9497, 8.5664)
+    async def gps_position(self, timeout=30): return (50.0, 10.0)   # Platzhalter, kein echter Ort
     async def stored_indices(self): return sorted(self.store)
     async def delete_sms(self, i): self.store.pop(i, None)
 

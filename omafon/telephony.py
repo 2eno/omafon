@@ -53,6 +53,7 @@ class TelephonyBackend:
     name = "basis"
     supports_sms = False         # Textnachrichten senden möglich?
     has_link = False             # meldet link_lost/link_ok?
+    has_modem = False            # Mobilfunkmodul, das Phone bei Bedarf neu startet
     offline_key = "link_lost"    # P-Schlüssel der Ansage, wenn offline (Phone)
 
     # ---------------------------------------------------------------- Pflicht
@@ -130,14 +131,14 @@ def create_backend(cfg, events: asyncio.Queue, loop: asyncio.AbstractEventLoop,
             simulator = HybridSimulator(cfg)
             return simulator.backend(events), simulator
         from .modem import Modem
-        from .sip import BaresipBackend
+        from .sip import BaresipBackend as Home
         return HybridBackend(
             cfg, events,
-            home=lambda q: BaresipBackend(cfg, q),
+            home=lambda q: Home(cfg, q),
             mobile=lambda q: Modem(cfg.serial_port, cfg.serial_baud, q, loop)), None
-    from .sip import BaresipBackend
     if sim:
         from .sipsim import SipSimulator
         simulator = SipSimulator(cfg)
         return simulator.backend(events), simulator
+    from .sip import BaresipBackend
     return BaresipBackend(cfg, events), None

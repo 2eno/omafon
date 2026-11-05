@@ -31,7 +31,7 @@ log = logging.getLogger("omafon.notify")
 
 
 class Notifier:
-    def __init__(self, cfg, opener=None, smtp_factory=None):
+    def __init__(self, cfg, opener=None, smtp_factory=None, smtp_ssl_factory=None):
         self.cfg = cfg
         opts = getattr(cfg, "notify", None) or {}
         self.enabled = bool(opts.get("enabled"))
@@ -39,6 +39,7 @@ class Notifier:
         self.smtp = {k[5:]: v for k, v in opts.items() if k.startswith("smtp_")}
         self._open = opener or urllib.request.urlopen
         self._smtp_factory = smtp_factory or smtplib.SMTP
+        self._smtp_ssl_factory = smtp_ssl_factory or smtplib.SMTP_SSL
 
     def can_reach(self, number: str) -> bool:
         c = self.cfg.by_number(number)
@@ -85,8 +86,16 @@ class Notifier:
         msg["To"] = to
         msg["Subject"] = text.split(".")[0][:60] or "Omafon"
         msg.set_content(text)
-        with self._smtp_factory(self.smtp["host"], int(self.smtp.get("port", 587)), timeout=20) as s:
-            s.starttls(context=ssl.create_default_context())
+        port = int(self.smtp.get("port", 587))
+        ctx = ssl.create_default_context()
+        if port == 465:                          # SMTPS: TLS von Anfang an (z. B. viele Freemailer)
+            factory = self._smtp_ssl_factory
+            conn = factory(self.smtp["host"], port, timeout=20, context=ctx)
+        else:
+            conn = self._smtp_factory(self.smtp["host"], port, timeout=20)
+        with conn as s:
+            if port != 465:
+                s.starttls(context=ctx)
             if self.smtp.get("user"):
                 s.login(self.smtp["user"], self.smtp.get("password", ""))
             s.send_message(msg)

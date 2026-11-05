@@ -11,6 +11,7 @@ der SIMCom-Module je nach Firmware unzuverlässig sind.
 from __future__ import annotations
 
 import datetime as _dt
+import re
 from dataclasses import dataclass, field
 
 # Grundtabelle GSM 03.38 (128 Zeichen, Index = Septett-Wert). 0x1B = Escape.
@@ -92,7 +93,11 @@ def _header_septets(udh_len: int) -> int:
 
 
 # --------------------------------------------------------------- Adressen
+_BCD = {"*": "A", "#": "B"}
+
+
 def _bcd_swap(digits: str) -> bytes:
+    digits = "".join(_BCD.get(c, c) for c in digits)
     if len(digits) % 2:
         digits += "F"
     return bytes(int(digits[i + 1] + digits[i], 16) for i in range(0, len(digits), 2))
@@ -100,13 +105,15 @@ def _bcd_swap(digits: str) -> bytes:
 
 def _bcd_unswap(data: bytes, ndigits: int) -> str:
     s = "".join(f"{b & 0x0F:X}{b >> 4:X}" for b in data)
-    return s[:ndigits].replace("F", "")
+    return s[:ndigits].replace("F", "").replace("A", "*").replace("B", "#")
 
 
 def encode_address(number: str) -> bytes:
-    number = number.strip().replace(" ", "")
+    number = (number or "").strip()
     toa = 0x91 if number.startswith("+") else 0x81
-    digits = number.lstrip("+")
+    digits = re.sub(r"[^0-9*#]", "", number)      # "0171 / 123-45" -> "017112345"
+    if not digits:
+        raise ValueError(f"keine Telefonnummer: {number!r}")
     return bytes([len(digits), toa]) + _bcd_swap(digits)
 
 
@@ -163,7 +170,7 @@ def decode_deliver(pdu_hex: str) -> Deliver:
         raise ValueError("keine SMS-DELIVER-PDU")
     udhi = bool(first & 0x40)
     sender, pos = decode_address(data, pos)
-    _pid, dcs = data[pos], data[pos + 1]
+    dcs = data[pos + 1]                # data[pos] = Protokollkennung, ungenutzt
     pos += 2
     ts = _decode_scts(data[pos: pos + 7])
     pos += 7

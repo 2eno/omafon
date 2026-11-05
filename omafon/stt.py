@@ -39,10 +39,14 @@ class Recognizer:
         self._model = None
 
     async def _record(self, rec, max_s: float, silence_s: float, grammar: bool) -> tuple[str, bytes]:
-        proc = await asyncio.create_subprocess_exec(
-            "arecord", "-q", "-D", self.cfg.mic_device, "-f", "S16_LE", "-r", str(RATE),
-            "-c", "1", "-t", "raw", stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL)
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "arecord", "-q", "-D", self.cfg.mic_device, "-f", "S16_LE", "-r", str(RATE),
+                "-c", "1", "-t", "raw", stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL)
+        except OSError as e:
+            log.error("Aufnahme nicht möglich: %s", e)
+            return "", b""
         texts, pcm = [], bytearray()
         start = last_voice = time.monotonic()
         heard = False
@@ -68,7 +72,11 @@ class Recognizer:
                 if heard and time.monotonic() - last_voice > silence_s:
                     break
         finally:
-            proc.terminate()
+            if proc.returncode is None:
+                try:
+                    proc.terminate()
+                except ProcessLookupError:     # arecord schon beendet (kein Mikrofon …)
+                    pass
             await proc.wait()
         final = json.loads(rec.FinalResult()).get("text", "")
         if final:

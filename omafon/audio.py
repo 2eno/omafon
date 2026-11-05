@@ -11,6 +11,7 @@ import asyncio
 import hashlib
 import logging
 import math
+import os
 import shutil
 import struct
 import wave
@@ -64,6 +65,7 @@ class Audio:
         self._lock = asyncio.Lock()
         self.route_mode = "speaker"
         self.volume = cfg.volume
+        self._gen = 0                         # zählt unterbrechende Ansagen (say)
         self._make_tones()
 
     # ------------------------------------------------------------ Töne
@@ -73,7 +75,8 @@ class Audio:
         if path.exists():
             return path
         rate = 22050
-        with wave.open(str(path), "wb") as w:
+        tmp = path.with_suffix(f".{os.getpid()}.tmp")   # nie eine halbe WAV im Cache
+        with wave.open(str(tmp), "wb") as w:
             w.setnchannels(1)
             w.setsampwidth(2)
             w.setframerate(rate)
@@ -83,6 +86,7 @@ class Audio:
                     env = min(1.0, i / 200, (n - i) / 200)  # weiche Flanken, kein Knacken
                     v = math.sin(2 * math.pi * freq * i / rate) * vol * env if freq else 0
                     w.writeframes(struct.pack("<h", int(v * 32767)))
+        os.replace(tmp, path)
         return path
 
     def _make_tones(self) -> None:
@@ -119,31 +123,50 @@ class Audio:
             log.error("Verstärker nicht erreichbar: %s", e)
 
     # ------------------------------------------------------------ Sprache
-    def _cache_path(self, text: str) -> Path:
+    def _engine(self) -> str:
+        if shutil.which(self.cfg.piper_bin) and Path(self.cfg.piper_model).exists():
+            return "piper"
+        return "espeak" if shutil.which("espeak-ng") else ""
+
+    def _cache_path(self, text: str, engine: str = "piper") -> Path:
+        # Notlösung espeak eigens schlüsseln: sonst bliebe die Roboterstimme im
+        # Cache, auch wenn Piper später installiert ist.
         key = f"{self.cfg.piper_model}|{self.cfg.speech_rate}|{text}"
+        if engine != "piper":
+            key = f"{engine}|{key}"
         return self.cache / (hashlib.sha1(key.encode()).hexdigest()[:16] + ".wav")
 
     async def synth(self, text: str) -> Path | None:
         path = self._cache_path(text)
         if path.exists():
             return path
-        tmp = path.with_suffix(".tmp.wav")
-        if shutil.which(self.cfg.piper_bin) and Path(self.cfg.piper_model).exists():
+        engine = self._engine()
+        if engine != "piper":
+            path = self._cache_path(text, engine)
+            if path.exists():
+                return path
+        tmp = path.with_suffix(f".{os.getpid()}.{id(text)}.tmp.wav")   # parallele Synthesen getrennt
+        if engine == "piper":
             cmd = [self.cfg.piper_bin, "--model", self.cfg.piper_model,
                    "--length_scale", str(self.cfg.speech_rate), "--output_file", str(tmp)]
-        elif shutil.which("espeak-ng"):
+        elif engine == "espeak":
             log.warning("Piper fehlt – Notlösung espeak-ng")
             cmd = ["espeak-ng", "-v", "de", "-s", "135", "-w", str(tmp), text]
         else:
             log.error("Keine Sprachausgabe installiert")
             return None
-        proc = await asyncio.create_subprocess_exec(
-            *cmd, stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
-        await proc.communicate(text.encode("utf-8") if "piper" in cmd[0] else None)
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd, stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+            await proc.communicate(text.encode("utf-8") if engine == "piper" else None)
+        except OSError as e:
+            log.error("Sprachsynthese startet nicht: %s", e)
+            return None
         if proc.returncode == 0 and tmp.exists():
-            tmp.rename(path)
+            os.replace(tmp, path)
             return path
+        tmp.unlink(missing_ok=True)
         log.error("Sprachsynthese fehlgeschlagen: %r", text)
         return None
 
@@ -156,15 +179,23 @@ class Audio:
             except asyncio.TimeoutError:
                 p.kill()
 
-    async def play(self, path: Path | None, interrupt: bool = True) -> None:
+    async def play(self, path: Path | None, interrupt: bool = True, gen: int | None = None) -> None:
+        """gen: Ansage-Generation aus say(). Wartet die Wiedergabe auf eine
+        laufende und kommt inzwischen eine neuere Ansage, entfällt sie."""
         if path is None:
             return
         if interrupt:
             await self.stop()
         async with self._lock:
-            self._proc = await asyncio.create_subprocess_exec(
-                "aplay", "-q", "-D", self.cfg.audio_device, str(path),
-                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+            if gen is not None and gen != self._gen:
+                return
+            try:
+                self._proc = await asyncio.create_subprocess_exec(
+                    "aplay", "-q", "-D", self.cfg.audio_device, str(path),
+                    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+            except OSError as e:                   # aplay fehlt: Telefon läuft weiter
+                log.error("Wiedergabe nicht möglich: %s", e)
+                return
             await self._proc.wait()
 
     async def say(self, text: str, interrupt: bool = True) -> None:
@@ -174,14 +205,15 @@ class Audio:
         nächste angefordert worden, wird diese hier verworfen.
         """
         log.info("SAGT: %s", text)
-        self._gen = getattr(self, "_gen", 0) + (1 if interrupt else 0)
+        if interrupt:
+            self._gen += 1
         gen = self._gen
         if interrupt:
             await self.stop()
         path = await self.synth(text)
         if gen != self._gen:
             return
-        await self.play(path, interrupt=False)
+        await self.play(path, interrupt=False, gen=gen)
 
     async def tone(self, name: str, interrupt: bool = False) -> None:
         await self.play(self.tones[name], interrupt=interrupt)
