@@ -1,0 +1,14 @@
+{
+  "current": "0.9.0",
+  "previous": "",
+  "pending": "",
+  "phase": "idle",
+  "last_error": "",
+  "available": {
+    "version": "0.10.0",
+    "notes": "Beispiel: Ansagen klarer, Akku hält länger."
+  },
+  "update_available": true,
+  "configured": true,
+  "can_rollback": false
+}

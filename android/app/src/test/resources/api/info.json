@@ -1,0 +1,8 @@
+{
+  "app": "omafon",
+  "api": 1,
+  "version": "0.9.0",
+  "device_id": "00000000-0000-4000-8000-000000000000",
+  "variant": "sip",
+  "pairing_open": true
+}

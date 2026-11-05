@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Kein Klartext. Das selbst signierte Zertifikat des Omafon prüft die App
+     selbst (Fingerabdruck beim Koppeln gemerkt, siehe data/Pinning.kt). -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

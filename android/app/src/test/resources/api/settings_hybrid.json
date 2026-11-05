@@ -1,0 +1,575 @@
+{
+  "variant": "hybrid",
+  "groups": [
+    {
+      "title": "Allgemein",
+      "items": [
+        {
+          "key": "owner_name",
+          "type": "text",
+          "label": "Name der Nutzerin",
+          "help": "Steht in der Notruf-Nachricht.",
+          "unit": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "live": false,
+          "choices": [],
+          "value": "Oma Erika"
+        }
+      ]
+    },
+    {
+      "title": "Ton und Sprache",
+      "items": [
+        {
+          "key": "volume",
+          "type": "int",
+          "label": "Lautstärke beim Start",
+          "help": "",
+          "unit": "",
+          "min": 1,
+          "max": 5,
+          "step": 1,
+          "live": true,
+          "choices": [],
+          "value": 4
+        },
+        {
+          "key": "speech_rate",
+          "type": "float",
+          "label": "Sprechtempo",
+          "help": "1,0 normal, größer = langsamer.",
+          "unit": "",
+          "min": 0.8,
+          "max": 1.6,
+          "step": 0.1,
+          "live": false,
+          "choices": [],
+          "value": 1.2
+        },
+        {
+          "key": "default_route",
+          "type": "choice",
+          "label": "Gespräche hören über",
+          "help": "",
+          "unit": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "live": false,
+          "choices": [
+            {
+              "value": "earpiece",
+              "label": "Hörer am Ohr"
+            },
+            {
+              "value": "speaker",
+              "label": "Lautsprecher"
+            }
+          ],
+          "value": "earpiece"
+        }
+      ]
+    },
+    {
+      "title": "Tasten",
+      "items": [
+        {
+          "key": "long_press_s",
+          "type": "float",
+          "label": "Langer Tastendruck ab",
+          "help": "",
+          "unit": "s",
+          "min": 0.8,
+          "max": 2.5,
+          "step": 0.1,
+          "live": false,
+          "choices": [],
+          "value": 1.2
+        },
+        {
+          "key": "hangup_hold_s",
+          "type": "float",
+          "label": "Auflegen im Gespräch: halten",
+          "help": "Schützt davor, mit der Wange aufzulegen. 0 = sofort.",
+          "unit": "s",
+          "min": 0,
+          "max": 1.5,
+          "step": 0.1,
+          "live": false,
+          "choices": [],
+          "value": 0.5
+        },
+        {
+          "key": "entry_timeout_s",
+          "type": "int",
+          "label": "Eingabe verwerfen nach",
+          "help": "",
+          "unit": "s",
+          "min": 10,
+          "max": 90,
+          "step": 5,
+          "live": false,
+          "choices": [],
+          "value": 20
+        }
+      ]
+    },
+    {
+      "title": "Nachrichten",
+      "items": [
+        {
+          "key": "news_signal_minutes",
+          "type": "int",
+          "label": "Gong für neue Nachrichten alle",
+          "help": "0 = nur einmal.",
+          "unit": "min",
+          "min": 0,
+          "max": 60,
+          "step": 5,
+          "live": false,
+          "choices": [],
+          "value": 10
+        },
+        {
+          "key": "news_led",
+          "type": "bool",
+          "label": "LED blinkt bei neuen Nachrichten",
+          "help": "",
+          "unit": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "live": false,
+          "choices": [],
+          "value": true
+        },
+        {
+          "key": "quiet_hours",
+          "type": "hours",
+          "label": "Ruhezeit (kein Gong, keine Ansagen)",
+          "help": "",
+          "unit": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "live": false,
+          "choices": [],
+          "value": [
+            22,
+            7
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Notruf",
+      "items": [
+        {
+          "key": "sos_hold_s",
+          "type": "float",
+          "label": "Notrufknopf halten",
+          "help": "",
+          "unit": "s",
+          "min": 2,
+          "max": 6,
+          "step": 0.5,
+          "live": false,
+          "choices": [],
+          "value": 3.0
+        },
+        {
+          "key": "sos_cancel_window_s",
+          "type": "int",
+          "label": "Abbrechen möglich für",
+          "help": "",
+          "unit": "s",
+          "min": 3,
+          "max": 15,
+          "step": 1,
+          "live": false,
+          "choices": [],
+          "value": 5
+        },
+        {
+          "key": "emergency_ring_seconds",
+          "type": "int",
+          "label": "Klingeln je Notfallkontakt",
+          "help": "",
+          "unit": "s",
+          "min": 15,
+          "max": 60,
+          "step": 5,
+          "live": false,
+          "choices": [],
+          "value": 30
+        },
+        {
+          "key": "emergency_rounds",
+          "type": "int",
+          "label": "Notrufkette durchlaufen",
+          "help": "",
+          "unit": "×",
+          "min": 1,
+          "max": 3,
+          "step": 1,
+          "live": false,
+          "choices": [],
+          "value": 2
+        },
+        {
+          "key": "emergency_callback_minutes",
+          "type": "int",
+          "label": "Rückrufe automatisch annehmen",
+          "help": "",
+          "unit": "min",
+          "min": 0,
+          "max": 180,
+          "step": 10,
+          "live": false,
+          "choices": [],
+          "value": 30
+        }
+      ]
+    },
+    {
+      "title": "Ladeschale",
+      "items": [
+        {
+          "key": "answer_on_lift",
+          "type": "bool",
+          "label": "Abheben aus der Schale nimmt an",
+          "help": "",
+          "unit": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "live": false,
+          "choices": [],
+          "value": true
+        },
+        {
+          "key": "dock_in_call",
+          "type": "choice",
+          "label": "Einstellen im Gespräch",
+          "help": "",
+          "unit": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "live": false,
+          "choices": [
+            {
+              "value": "hangup",
+              "label": "legt auf"
+            },
+            {
+              "value": "handsfree",
+              "label": "Freisprechen"
+            },
+            {
+              "value": "ignore",
+              "label": "nichts"
+            }
+          ],
+          "value": "hangup"
+        },
+        {
+          "key": "dock_speaker",
+          "type": "bool",
+          "label": "In der Schale über deren Lautsprecher",
+          "help": "",
+          "unit": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "live": false,
+          "choices": [],
+          "value": true
+        }
+      ]
+    },
+    {
+      "title": "Verbindung",
+      "items": [
+        {
+          "key": "link_reminder_minutes",
+          "type": "int",
+          "label": "Erinnerung „keine Verbindung“ alle",
+          "help": "",
+          "unit": "min",
+          "min": 0,
+          "max": 60,
+          "step": 5,
+          "live": false,
+          "choices": [],
+          "value": 10
+        }
+      ]
+    },
+    {
+      "title": "Fritz!Box",
+      "items": [
+        {
+          "key": "sip.user",
+          "type": "text",
+          "label": "Benutzername IP-Telefon",
+          "help": "Telefonie → Telefoniegeräte",
+          "unit": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "live": false,
+          "choices": [],
+          "value": "omafon-ip"
+        },
+        {
+          "key": "sip.password",
+          "type": "secret",
+          "label": "Kennwort IP-Telefon",
+          "help": "",
+          "unit": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "live": false,
+          "choices": [],
+          "value": null,
+          "is_set": true
+        },
+        {
+          "key": "fritz.user",
+          "type": "text",
+          "label": "Fritz!Box-Benutzer (TR-064)",
+          "help": "Recht „Sprachnachrichten, Faxnachrichten, FRITZ!App Fon und Anrufliste“",
+          "unit": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "live": false,
+          "choices": [],
+          "value": "omafon"
+        },
+        {
+          "key": "fritz.password",
+          "type": "secret",
+          "label": "Kennwort Fritz!Box-Benutzer",
+          "help": "",
+          "unit": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "live": false,
+          "choices": [],
+          "value": null,
+          "is_set": true
+        },
+        {
+          "key": "fritz.tam",
+          "type": "int",
+          "label": "Anrufbeantworter Nr.",
+          "help": "",
+          "unit": "",
+          "min": 0,
+          "max": 4,
+          "step": 1,
+          "live": false,
+          "choices": [],
+          "value": 0
+        }
+      ]
+    },
+    {
+      "title": "Benachrichtigungen",
+      "items": [
+        {
+          "key": "notify.enabled",
+          "type": "bool",
+          "label": "Telegram/E-Mail einschalten",
+          "help": "Notruf-Hinweis und Diktat, wenn keine SMS möglich ist.",
+          "unit": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "live": false,
+          "choices": [],
+          "value": false
+        },
+        {
+          "key": "notify.telegram_token",
+          "type": "secret",
+          "label": "Telegram-Bot-Token",
+          "help": "",
+          "unit": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "live": false,
+          "choices": [],
+          "value": null,
+          "is_set": false
+        },
+        {
+          "key": "notify.smtp_host",
+          "type": "text",
+          "label": "E-Mail-Server (SMTP)",
+          "help": "",
+          "unit": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "live": false,
+          "choices": [],
+          "value": null
+        },
+        {
+          "key": "notify.smtp_port",
+          "type": "int",
+          "label": "SMTP-Port",
+          "help": "",
+          "unit": "",
+          "min": 1,
+          "max": 65535,
+          "step": 1,
+          "live": false,
+          "choices": [],
+          "value": 587
+        },
+        {
+          "key": "notify.smtp_user",
+          "type": "text",
+          "label": "SMTP-Benutzer",
+          "help": "",
+          "unit": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "live": false,
+          "choices": [],
+          "value": null
+        },
+        {
+          "key": "notify.smtp_password",
+          "type": "secret",
+          "label": "SMTP-Kennwort",
+          "help": "",
+          "unit": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "live": false,
+          "choices": [],
+          "value": null,
+          "is_set": false
+        },
+        {
+          "key": "notify.smtp_from",
+          "type": "text",
+          "label": "Absenderadresse",
+          "help": "",
+          "unit": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "live": false,
+          "choices": [],
+          "value": null
+        }
+      ]
+    },
+    {
+      "title": "Hybrid",
+      "items": [
+        {
+          "key": "hybrid.prefer",
+          "type": "choice",
+          "label": "Normale Anrufe über",
+          "help": "",
+          "unit": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "live": false,
+          "choices": [
+            {
+              "value": "home",
+              "label": "Fritz!Box, wenn erreichbar"
+            },
+            {
+              "value": "mobile",
+              "label": "Mobilfunk"
+            }
+          ],
+          "value": "home"
+        },
+        {
+          "key": "hybrid.home_modem",
+          "type": "choice",
+          "label": "Mobilfunk zu Hause",
+          "help": "„Sparmodus“ braucht eine Rufumleitung beim Anbieter.",
+          "unit": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "live": false,
+          "choices": [
+            {
+              "value": "on",
+              "label": "an (Handynummer erreichbar)"
+            },
+            {
+              "value": "off",
+              "label": "Sparmodus"
+            }
+          ],
+          "value": "on"
+        },
+        {
+          "key": "hybrid.announce_mode",
+          "type": "bool",
+          "label": "„Zu Hause / Unterwegs“ ansagen",
+          "help": "",
+          "unit": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "live": false,
+          "choices": [],
+          "value": false
+        },
+        {
+          "key": "hybrid.weak_wifi_dbm",
+          "type": "int",
+          "label": "Schwaches WLAN ab",
+          "help": "Darunter lieber über Mobilfunk telefonieren.",
+          "unit": "dBm",
+          "min": -90,
+          "max": -55,
+          "step": 1,
+          "live": false,
+          "choices": [],
+          "value": -75
+        }
+      ]
+    },
+    {
+      "title": "Updates",
+      "items": [
+        {
+          "key": "update_url",
+          "type": "text",
+          "label": "Update-Kanal (Manifest-URL)",
+          "help": "Leer = keine Updates.",
+          "unit": "",
+          "min": null,
+          "max": null,
+          "step": null,
+          "live": false,
+          "choices": [],
+          "value": null
+        }
+      ]
+    }
+  ]
+}

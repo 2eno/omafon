@@ -1,0 +1,54 @@
+{
+  "contacts": [
+    {
+      "name": "Peter",
+      "number": "+491711234567",
+      "spoken": [
+        "peter",
+        "sohn"
+      ],
+      "speed_dial": 1,
+      "emergency": 1,
+      "telegram_chat_id": null,
+      "email": "peter@example.org"
+    },
+    {
+      "name": "Maria",
+      "number": "+491609876543",
+      "spoken": [
+        "maria",
+        "tochter"
+      ],
+      "speed_dial": 2,
+      "emergency": 2,
+      "telegram_chat_id": null
+    },
+    {
+      "name": "der Enkel",
+      "number": "+491525550000",
+      "spoken": [
+        "enkel"
+      ],
+      "speed_dial": 3,
+      "emergency": 3
+    },
+    {
+      "name": "Doktor Weber",
+      "number": "06990009123",
+      "spoken": [
+        "doktor",
+        "arzt",
+        "weber"
+      ],
+      "speed_dial": 9
+    },
+    {
+      "name": "den Notruf",
+      "number": "112",
+      "spoken": [
+        "notruf"
+      ],
+      "emergency": 9
+    }
+  ]
+}
