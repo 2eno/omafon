@@ -1,0 +1,11 @@
+// Erlaubt dem Dienstbenutzer "omafon", das WLAN neu zu starten (letzter Schritt
+// der Verbindungsreparatur im Festnetz, sip.wifi_reset_cmd mit nmcli).
+// Ohne diese Regel scheitert der Schritt still an fehlenden Rechten.
+//   sudo cp systemd/omafon-polkit.rules /etc/polkit-1/rules.d/50-omafon.rules
+polkit.addRule(function (action, subject) {
+    if (subject.user == "omafon" &&
+        (action.id == "org.freedesktop.NetworkManager.enable-disable-wifi" ||
+         action.id == "org.freedesktop.NetworkManager.network-control")) {
+        return polkit.Result.YES;
+    }
+});

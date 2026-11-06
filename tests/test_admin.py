@@ -358,6 +358,17 @@ class UpdateTests(unittest.TestCase):
         self.assertIn("nicht stabil", state.last_error)
         self.assertEqual(state.phase, "error")              # App zeigt den Rückfall an
 
+    def test_failed_boots_without_previous_fall_back_to_basis(self):
+        self.publish("9.9.0")
+        up = self.updater()
+        up.check(); up.install()
+        up.state.previous = "8.0.0"                          # gibt es nicht (mehr)
+        up.save()
+        for _ in range(MAX_BOOTS):
+            self.updater("9.9.0").boot()
+        self.assertEqual(self.updater("9.9.0").boot(), BASIS)
+        self.assertFalse((self.data / "current").exists())
+
     def test_rollback_between_releases(self):
         self.publish("9.9.0")
         up = self.updater()
@@ -447,6 +458,34 @@ class UpdateTests(unittest.TestCase):
     def test_not_configured(self):
         with self.assertRaises(UpdateError):
             Updater(self.data, __version__).check()
+
+
+class RobustApiTests(AdminBase):
+    """Gefunden mit einem HTTP-Fuzzer: nie 500, immer eine verständliche 400."""
+
+    async def test_odd_json_is_rejected_cleanly(self):
+        tok = self.token()
+        for path, body in (("/api/v1/speak", b"null"), ("/api/v1/settings", b"[]"),
+                           ("/api/v1/settings", b'{"values": {"volume": 1e999}}'),
+                           ("/api/v1/settings", b'{"values": {"speech_rate": NaN}}'),
+                           ("/api/v1/settings", b'{"values": {"volume": ' + b"9" * 500 + b"}}"),
+                           ("/api/v1/contacts", b'"x"'), ("/api/v1/settings", b"\xff\xfe")):
+            method = "POST" if path.endswith("speak") else "PUT"
+            with self.subTest(body=body[:40]), self.assertRaises(ApiError) as e:
+                await self.admin.handle(method, path, self.auth(tok), body)
+            self.assertEqual(e.exception.status, 400)
+        config.load(self.cfg_path)                                 # Datei unversehrt
+
+
+class LocalOnlyTests(unittest.TestCase):
+    def test_only_home_network_addresses(self):
+        from omafon.admin import local_peer
+        for ip in ("192.168.178.20", "10.0.0.5", "172.16.1.1", "127.0.0.1", "fe80::1%wlan0",
+                   "fd00::5", "::ffff:192.168.1.9", "10.8.0.2"):
+            self.assertTrue(local_peer(ip), ip)
+        for ip in ("8.8.8.8", "2a00:1450::1", "::ffff:8.8.8.8", "", "quatsch"):
+            self.assertFalse(local_peer(ip), ip)
+        self.assertTrue(local_peer("8.8.8.8", allow_public=True))
 
 
 class UpdateApiTests(AdminBase):

@@ -259,10 +259,13 @@ class Updater:
             s.phase = "idle"
         if s.pending:
             s.boot_attempts += 1
-            if s.boot_attempts > MAX_BOOTS and self._exists(s.previous):
-                log.error("Version %s startet nicht – zurück zu %s", s.pending, s.previous)
+            if s.boot_attempts > MAX_BOOTS:
+                # Vorherige Version fehlt (z. B. von Hand gelöscht): die
+                # Erstinstallation unter /opt ist immer da – nie auf der kaputten bleiben
+                target = s.previous if self._exists(s.previous) else BASIS
+                log.error("Version %s startet nicht – zurück zu %s", s.pending, target)
                 failed = s.pending
-                self.activate(s.previous)
+                self.activate(target)
                 s.previous, s.pending, s.boot_attempts = "", "", 0
                 s.last_error = f"Version {failed} lief nicht stabil – zurück auf {s.current}"
                 s.phase = "error"

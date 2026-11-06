@@ -47,6 +47,7 @@ SIP_DEFAULTS = {
     "restart_s": 120,            # danach baresip neu starten
     "wifi_reset_s": 180,         # danach WLAN neu verbinden (wifi_reset_cmd)
     "wifi_reset_cmd": "nmcli radio wifi off && sleep 2 && nmcli radio wifi on",
+    "wifi_reset_timeout_s": 60,  # länger darf der WLAN-Neustart nicht dauern
     "wifi_iface": "wlan0",
     "ring_repeat_s": 3,          # "ring" an Phone wiederholen, solange es klingelt
 }
@@ -251,6 +252,10 @@ class BaresipBackend(TelephonyBackend):
             return
         if not self.sip["user"] or not self.sip["password"]:
             log.error("sip.user/sip.password fehlen in config.yaml")
+        if any(c in str(self.sip["password"]) + str(self.sip["user"]) for c in ";<>\r\n"):
+            # baresip trennt Konto-Parameter mit ';' – solche Kennwörter kommen verstümmelt an
+            log.error("sip.user/sip.password enthält ; < > oder Zeilenumbruch – bitte in der "
+                      "Fritz!Box ein Kennwort ohne diese Zeichen vergeben")
         d = Path(self.cfg.data_dir) / "baresip"
         d.mkdir(parents=True, exist_ok=True)
         os.chmod(d, 0o700)
@@ -461,10 +466,21 @@ class BaresipBackend(TelephonyBackend):
         elif step == "restart" and self.spawn and self.proc:
             self.proc.terminate()                 # Überwachung startet neu
         elif step == "wifi" and self.sip["wifi_reset_cmd"]:
-            p = await asyncio.create_subprocess_shell(
-                self.sip["wifi_reset_cmd"], stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL)
-            await p.wait()
+            try:
+                p = await asyncio.create_subprocess_shell(
+                    self.sip["wifi_reset_cmd"], stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.PIPE)
+                _out, err = await asyncio.wait_for(p.communicate(),
+                                                   float(self.sip["wifi_reset_timeout_s"]))
+                if p.returncode:
+                    # meist fehlende Rechte: systemd/omafon-polkit.rules installieren
+                    log.error("WLAN-Neustart fehlgeschlagen (%s): %s", p.returncode,
+                              err.decode(errors="replace").strip()[:200])
+            except asyncio.TimeoutError:          # nie die Überwachung blockieren
+                log.error("WLAN-Neustart hängt – abgebrochen")
+                p.kill()
+            except OSError as e:
+                log.error("WLAN-Neustart nicht möglich: %s", e)
         if step == "wifi":                        # danach von vorn eskalieren
             self._escalated.clear()
             self.offline_since = self.clock() - float(self.sip["link_grace_s"])
@@ -577,12 +593,15 @@ class BaresipBackend(TelephonyBackend):
             self.store[self._next_idx] = VoiceMessage(
                 sender=m.number, text="", timestamp=m.time, audio=audio)
             self._seen.add(key)
+            self._emit("sms", str(self._next_idx))    # zuerst melden: nichts geht verloren
+            found += 1
             after = self.fritz_opts["tam_after_fetch"]
             if after in ("mark", "delete"):
-                await loop.run_in_executor(None, getattr(self.fritz,
-                                           "mark_read" if after == "mark" else "delete"), m)
-            self._emit("sms", str(self._next_idx))
-            found += 1
+                try:
+                    await loop.run_in_executor(None, getattr(self.fritz,
+                                               "mark_read" if after == "mark" else "delete"), m)
+                except Exception as e:                  # Box kurz weg: Nachricht ist trotzdem da
+                    log.warning("AB-Nachricht %s nicht als gehört markiert: %r", m.index, e)
         return found
 
     async def _store_audio(self, raw: bytes, stem: str) -> str:

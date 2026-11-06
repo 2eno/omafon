@@ -32,7 +32,9 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import hashlib
+import ipaddress
 import json
+import math
 import logging
 import os
 import re
@@ -56,7 +58,8 @@ API = "/api/v1"
 MAX_BODY = 256 * 1024
 PAIR_WINDOW_S = 300
 PAIR_ATTEMPTS = 5
-ADMIN_DEFAULTS = {"enabled": True, "port": 8443, "bind": "0.0.0.0", "tls": True}
+ADMIN_DEFAULTS = {"enabled": True, "port": 8443, "bind": "0.0.0.0", "tls": True,
+                  "allow_public": False}   # True nur, wer weiß, was er tut
 
 
 # ====================================================================== Schema
@@ -175,6 +178,8 @@ def validate_setting(s: Setting, value):
         return value
     if s.type in ("int", "float"):
         if isinstance(value, bool) or not isinstance(value, (int, float)):
+            bad("Zahl erwartet")
+        if isinstance(value, float) and not math.isfinite(value) or isinstance(value, int) and abs(value) > 10**9:
             bad("Zahl erwartet")
         if s.type == "int":
             if int(value) != value:
@@ -531,6 +536,11 @@ class AdminServer:
 
     async def _client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         status, body = 500, {"error": "Interner Fehler"}
+        peer = writer.get_extra_info("peername")
+        if not local_peer(peer[0] if peer else "", self.opts.get("allow_public", False)):
+            log.warning("Verwaltung: Verbindung von %s abgelehnt (nicht im Heimnetz)", peer)
+            writer.close()
+            return
         try:
             method, path, headers, data = await asyncio.wait_for(_read_request(reader), 15)
             status, body = 200, await self.handle(method, path, headers, data)
@@ -558,9 +568,11 @@ class AdminServer:
         body = {}
         if data:
             try:
-                body = json.loads(data.decode("utf-8"))
-            except ValueError as e:
+                body = json.loads(data.decode("utf-8"), parse_constant=_no_constant)
+            except ValueError as e:                      # auch UnicodeDecodeError
                 raise ApiError(400, "JSON erwartet") from e
+            if not isinstance(body, dict):
+                raise ApiError(400, "JSON-Objekt erwartet")
         if method == "GET" and route == "/info":
             return self.info()
         if method == "POST" and route == "/pair":
@@ -614,6 +626,24 @@ class AdminServer:
 
 _REASON = {200: "OK", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found",
            409: "Conflict", 500: "Internal Server Error", 502: "Bad Gateway"}
+
+
+def local_peer(ip: str, allow_public: bool = False) -> bool:
+    """Nur Heimnetz/VPN: private, Link-lokale und Loopback-Adressen. Schützt, falls
+    das Gerät doch einmal öffentlich erreichbar ist (Mobilfunk-Daten, Portfreigabe)."""
+    if allow_public:
+        return True
+    try:
+        a = ipaddress.ip_address(ip.split("%")[0])
+    except ValueError:
+        return False
+    if getattr(a, "ipv4_mapped", None):
+        a = a.ipv4_mapped
+    return a.is_private or a.is_link_local or a.is_loopback
+
+
+def _no_constant(name: str):
+    raise ValueError(f"{name} ist keine Zahl")          # NaN/Infinity: JSON erlaubt sie nicht
 
 
 def _hash(token: str) -> str:

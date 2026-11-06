@@ -295,6 +295,12 @@ class BackendTests(Base):
         self.assertTrue(await self.until(lambda: self.backend.online))
         self.assertEqual(self.drain(), [("link_ok", "")])
 
+    async def test_hanging_wifi_reset_does_not_block_supervision(self):
+        self.backend.sip.update(wifi_reset_cmd="sleep 30", wifi_reset_timeout_s=0.2)
+        with self.assertLogs("omafon.sip", "ERROR") as logs:
+            await asyncio.wait_for(self.backend._escalate("wifi"), 5)
+        self.assertIn("hängt", " ".join(logs.output))
+
     async def test_wifi_down_detected_without_waiting_for_sip(self):
         state = Path(self.tmp.name) / "operstate"
         state.write_text("up\n")
@@ -334,6 +340,17 @@ class BackendTests(Base):
         self.assertTrue(Path(msg.audio).exists())
         self.assertEqual(msg.sender, "01609876543")
         self.assertEqual(self.sim.fritz.marked, [0])
+
+    async def test_voicemail_not_lost_when_marking_fails(self):
+        self.sim.fritz.add_message("01609876543", b"RIFF....WAVEfmt ", "Maria")
+
+        def broken_mark(msg):
+            raise OSError("Fritz!Box antwortet nicht")
+        self.sim.fritz.mark_read = broken_mark
+        self.drain()
+        with self.assertLogs("omafon.sip", "WARNING"):
+            self.assertEqual(await self.backend.poll_tam(), 1)
+        self.assertEqual([k for k, _ in self.drain()].count("sms"), 1)   # trotzdem gemeldet
 
     async def test_phonebook_refresh(self):
         self.assertEqual(await self.backend.refresh_phonebook(), 2)

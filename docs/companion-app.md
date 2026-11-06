@@ -46,7 +46,10 @@ Die Einstellungen beschreibt das Omafon selbst (Schema in `omafon/admin.py`,
 - **Kennwörter** (SIP, Fritz!Box, SMTP, Telegram) schickt das Omafon nie an die
   App, nur „gesetzt ja/nein“. Neue Kennwörter lassen sich setzen.
 - **Kein Zugriff aus dem Internet.** Kein Port in der Fritz!Box freigeben. Für
-  Fernwartung: Fritz!Box-VPN (WireGuard) aufs Handy, dann wie zu Hause.
+  Fernwartung: Fritz!Box-VPN (WireGuard) aufs Handy, dann wie zu Hause. Das Omafon
+  selbst nimmt nur Verbindungen von privaten Adressen an (Heimnetz, Link-lokal, VPN
+  mit privaten Adressen) – auch wenn es doch einmal öffentlich erreichbar wäre.
+  VPNs mit 100.64.x.x-Adressen (z. B. Tailscale) brauchen `admin: {allow_public: true}`.
 - Der **Update-Schlüssel** (`update_public_key`) ist absichtlich nicht über die
   App änderbar – sonst könnte, wer die App hat, beliebigen Code einspielen.
 

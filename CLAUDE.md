@@ -3,8 +3,9 @@
 ## Projektüberblick
 
 Omafon ist ein sprechendes Telefon für Menschen mit starker Sehbehinderung.
-Jeder Tastendruck wird angesagt, eingehende Anrufe und SMS werden vorgelesen,
-SMS können diktiert werden, und ein Notrufknopf ruft eine Kette von Kontakten an.
+Jeder Tastendruck wird angesagt, Anrufer werden mit Namen angekündigt, SMS werden per
+Gong gemeldet und auf Tastendruck vorgelesen, SMS können diktiert werden, und ein
+Notrufknopf ruft eine Kette von Kontakten an.
 
 - Zwei Varianten: **Festnetz** (Fritz!Box per WLAN/SIP, `backend: sip`) und
   **Hybrid** (zusätzlich LTE-Modem für unterwegs, `backend: hybrid`). Ein reines

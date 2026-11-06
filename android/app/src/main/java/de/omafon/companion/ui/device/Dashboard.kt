@@ -61,7 +61,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.omafon.companion.data.DeviceStatus
 import de.omafon.companion.data.OmafonApi
@@ -107,8 +110,11 @@ fun DashboardScreen(
     var confirmRestart by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { vm.messages.collect { snack.showSnackbar(it) } }
-    LaunchedEffect(Unit) {                      // Status alle 10 s still aktualisieren
-        while (true) { delay(10_000); vm.refresh(silent = true) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle) {                 // alle 10 s still aktualisieren – nur sichtbar
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) { delay(10_000); vm.refresh(silent = true) }
+        }
     }
 
     Scaffold(

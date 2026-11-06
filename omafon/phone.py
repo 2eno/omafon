@@ -355,13 +355,13 @@ class Phone:
             await self.answer()
         elif k == "HANGUP":
             self.stop_ringing()
+            self.call = None
+            self.go_idle()
+            self.speak(P["rejected"])
             try:
                 await self.modem.hangup()
             except ModemError:
                 pass
-            self.call = None
-            self.go_idle()
-            self.speak(P["rejected"])
         elif k == "INFO":
             self.speak(self.caller_phrase())
 
@@ -404,20 +404,20 @@ class Phone:
     async def key_sos(self, k, kind):
         if k == "HANGUP":
             self.cancel_job()
+            self.speak(P["sos_cancel"])
+            self.go_idle()
             if self.call:
                 await self.end_call(None)
-            self.go_idle()
-            self.speak(P["sos_cancel"])
 
     # ---------------------------------------------------------------- Lautstärke
     async def change_volume(self, delta: int) -> None:
         level = self.audio.set_volume(self.audio.volume + delta)
         if self.state in (S.IN_CALL, S.OUTGOING):
+            self.bg(self.audio.tone("beep"))          # Rückmeldung zuerst, dann das Modem
             try:
                 await self.modem.call_volume(level)
             except ModemError:
                 pass
-            self.bg(self.audio.tone("beep"))
         else:
             self.speak(f"Lautstärke {level}.")
 
@@ -613,18 +613,18 @@ class Phone:
         call = self.call
         self.call = None
         self.stop_ringing()                       # z. B. Notruf, während es klingelt
-        try:
-            await self.modem.hangup()
-        except ModemError:
-            pass
+        if phrase:
+            self.speak(phrase)                    # Regel 1: Ansage sofort, nicht nach dem Modem
         if call:
             call.reason = call.reason or "local"
             call.ended.set()
         if self.state != S.SOS:
             self.cancel_job()
             self.go_idle()
-        if phrase:
-            self.speak(phrase)
+        try:
+            await self.modem.hangup()             # kann bei hängendem Modem Sekunden dauern
+        except ModemError:
+            pass
 
     def caller_phrase(self) -> str:
         n = self.call.number if self.call else None

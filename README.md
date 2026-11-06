@@ -74,15 +74,23 @@ omafon/
   stt.py        Vosk-Spracherkennung (Namen + Diktat), optional Whisper-Server
   hardware.py   Tasten (MCP23017 + GPIO), Entprellung, Akku, Vibration
   numbers.py    "zwo" statt "zwei", Nummern in Gruppen, Uhrzeit
-tools/prerender.py   feste Ansagen vorab erzeugen
+  config.py     config.yaml laden und prüfen, Kontakte, Notrufkette
+  admin.py      Verwaltung für die Android-App (HTTPS im Heimnetz, Koppeln per Code)
+  update.py     signierte Updates mit automatischem Rückfall
+tools/prerender.py         feste Ansagen vorab erzeugen
+tools/make_release.py      Update-Schlüssel und signierte Pakete
+tools/api_fixtures.py      JSON-Beispiele der Schnittstelle für die App-Tests
+android/                   Companion-App (Kotlin, Jetpack Compose)
 cad/omafon_masse.scad      gemeinsame Maße Handteil/Ladeschale, Variante
 cad/omafon_gehaeuse.scad   Handteil: Prüfstück, Deckel mit Schalterplatte, Wanne, Hörerkopf, Akkudeckel, Notrufklappe …
 cad/omafon_tasten.scad     Tastenkappen und Tastenfront (OpenSCAD)
 cad/omafon_ladeschale.scad Ladeschale mit Lautsprecher
-systemd/omafon.service
-tests/test_omafon.py       26 Tests (Kern, Tasten, SMS, Notruf, Pinbelegung), ohne Hardware
-tests/test_festnetz.py     30 Tests (SIP-Backend, Fritz!Box, Ladeschale), ohne Hardware
-tests/test_hybrid.py       15 Tests (Routing, Notruf, Zweitanruf, Sparmodus), ohne Hardware
+systemd/                   Dienst mit Watchdog, Start-Wrapper (Rückfall), mDNS für die App
+tests/test_omafon.py       Kern, Tasten, SMS, Notruf, Pinbelegung, Hardware-Ausfall, Konfiguration
+tests/test_festnetz.py     SIP-Backend, Fritz!Box, Ladeschale, Zweitanruf
+tests/test_hybrid.py       Routing, Notruf mit zweitem Weg, Zweitanruf, Sparmodus
+tests/test_admin.py        App-Schnittstelle, Koppeln, Updates und Rückfall
+tests/test_fuzz.py         Zufallsfolgen von Tasten und Netz-Ereignissen gegen den Zustandsautomaten
 docs/                      Stückliste, Verkabelung, Festnetz-Recherche und -Hardware
 ```
 
@@ -161,6 +169,8 @@ aktualisieren oder beim SIMCom-Support nach dem passenden VoLTE-Profil fragen.
 7. `sudo python3 -m tools.prerender /etc/omafon/config.yaml` – erzeugt alle festen Ansagen.
 8. `sudo cp systemd/omafon.service /etc/systemd/system/ && sudo systemctl enable --now omafon`
    und für die App `sudo cp systemd/omafon.avahi.xml /etc/avahi/services/omafon.service`.
+   Damit das Telefon bei hängender Fritz!Box-Verbindung das WLAN selbst neu starten
+   darf: `sudo cp systemd/omafon-polkit.rules /etc/polkit-1/rules.d/50-omafon.rules`.
    Der Dienst startet über `systemd/omafon-start.sh` (aktive Version, Rückfall nach Updates).
 9. Zum Schluss `raspi-config` → Performance → **Overlay File System** an. Das System
    ist dann schreibgeschützt und übersteht Stromausfälle. Nur `/data` bleibt beschreibbar –

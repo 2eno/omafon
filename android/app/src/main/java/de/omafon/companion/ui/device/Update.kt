@@ -116,10 +116,14 @@ class UpdateViewModel(app: Application, id: String) : DeviceViewModel<UpdateInfo
                 }
                 if (info != null) {
                     _state.value = _state.value.copy(data = info)
-                    val running = target == null || info.current == target
+                    // "current" meldet die laufende Version: steht dort die neue, ist der
+                    // Neustart durch – auch wenn er zwischen zwei Abfragen lag.
+                    val newRunning = target != null && info.current == target
                     when {
                         info.phase == "error" -> { step.value = UpdateStep.NONE; return@launch }
-                        sawOffline && running -> { step.value = UpdateStep.DONE; return@launch }
+                        newRunning || (target == null && sawOffline) -> {
+                            step.value = UpdateStep.DONE; return@launch
+                        }
                         info.phase == "restarting" -> step.value = UpdateStep.RESTARTING
                     }
                 }

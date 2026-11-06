@@ -504,6 +504,23 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
         await self.pump()
         self.assertEqual(self.audio.volume, 2)
 
+    async def test_hangup_is_announced_before_slow_modem_answers(self):
+        self.modem.inject_call("+491711234567")
+        await self.pump()
+        await self.press("CALL")
+        hang = asyncio.Event()
+
+        async def slow_hangup():
+            await hang.wait()                                     # Modem hängt
+        self.modem.hangup = slow_hangup
+        self.hw.press("HANGUP", held=0.6)
+        task = asyncio.create_task(self.pump(5))
+        await asyncio.sleep(0.05)
+        self.assertIn(P["hung_up"], self.said())                  # Regel 1: sofort
+        self.assertEqual(self.phone.state, S.IDLE)
+        hang.set()
+        await task
+
     def test_texts_are_in_p_dict(self):
         """Regel 3: feste Ansagen nur in P (sonst fehlen sie im WAV-Cache)."""
         import re
