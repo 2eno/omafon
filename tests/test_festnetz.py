@@ -342,6 +342,12 @@ class BackendTests(Base):
         self.assertEqual(self.sim.fritz.marked, [0])
 
     async def test_voicemail_not_lost_when_marking_fails(self):
+        # Hintergrundabruf anhalten: holte er die Nachricht zuerst, fände dieser Test
+        # nichts mehr (früher zufällig rot)
+        for t in self.backend._tasks:
+            if t.get_name() == "fritz":
+                t.cancel()
+        await asyncio.sleep(0)
         self.sim.fritz.add_message("01609876543", b"RIFF....WAVEfmt ", "Maria")
 
         def broken_mark(msg):

@@ -42,15 +42,20 @@ Status: Software im Simulator getestet, Hardware ungetestet.
 | `omafon/config.py` | `config.yaml` laden, Kontakte, Notrufkette |
 | `omafon/admin.py` | Verwaltung für die Android-App: HTTPS+JSON `/api/v1`, Koppeln per Code, Einstellungs-Schema `SETTINGS`, Kontakte |
 | `omafon/update.py` | Signierte Updates (Ed25519), A/B unter `<data_dir>/releases`, Rückfall nach `MAX_BOOTS` Fehlstarts |
+| `omafon/clock.py` | Uhr ohne RTC: `known()` (NTP synchron oder Netzzeit vom Modem), `now()` |
 | `tools/prerender.py` | Alle festen Ansagen vorab als WAV erzeugen |
 | `tools/make_release.py` | Update-Schlüssel erzeugen, signiertes Paket + `manifest.json` bauen |
 | `tools/api_fixtures.py` | JSON-Beispiele der Schnittstelle für die App-Tests (`android/app/src/test/resources/api/`) |
 | `android/` | Companion-App (Kotlin, Compose, Material 3): `data/` API, Pinning, Speicher, mDNS; `ui/` Bildschirme |
 | `systemd/omafon-start.sh`, `systemd/omafon.avahi.xml` | Start-Wrapper (aktive Version), mDNS-Dienst `_omafon._tcp` |
+| `systemd/omafon-asound.conf`, `systemd/omafon-polkit.rules` | Geteilte Soundkarte (dmix/dsnoop), Recht für den WLAN-Neustart |
 | `tests/test_omafon.py` | Kern-Tests (Tasten, Anrufe, SMS, Notruf) mit SimModem ohne Hardware |
 | `tests/test_festnetz.py` | SIP-Backend gegen FakeBaresip, Fritz!Box, Ladeschale |
 | `tests/test_hybrid.py` | Hybrid-Routing, Notruf, Zweitanruf, Sparmodus |
 | `tests/test_admin.py` | Koppeln, Einstellungen, Neustart nur in Ruhe, HTTPS, Updates/Rückfall, App-Fixtures aktuell |
+| `tests/test_modem.py` | Echter AT-Treiber gegen nachgebaute serielle Leitung (SMS, URCs, GPS, Netzzeit, Abbrüche) |
+| `tests/test_fuzz.py` | Zufallsfolgen gegen den Zustandsautomaten mit Invarianten (`OMAFON_FUZZ_SEEDS`) |
+| `android/app/src/test/.../UiFlowTest.kt` | Oberflächentests (Robolectric) mit Bildschirmfotos in `android/app/build/screenshots/` |
 | `cad/omafon_masse.scad` | Gemeinsame Maße Handteil/Ladeschale je `variante` (festnetz 30 mm, hybrid 36 mm dick) |
 | `cad/omafon_gehaeuse.scad` | Handteil-Gehäuse: pruefstueck, deckel (mit Schalterplatte), wanne, tastengitter, akkudeckel, notrufklappe, lautstaerke_*, hoererkopf, hoermuschel; STL in Druckrichtung |
 | `cad/omafon_ladeschale.scad` | Ladeschale mit Lautsprecher, Federkontakten, Kodierrippe |
@@ -65,6 +70,7 @@ Status: Software im Simulator getestet, Hardware ungetestet.
 ```bash
 pip install -r requirements-dev.txt                       # PyYAML, cryptography
 python3 -m unittest discover -s tests -v                  # Tests
+OMAFON_FUZZ_SEEDS=200 python3 -m unittest tests.test_fuzz  # gründlicher Zufallstest (sonst 6 Startwerte)
 python3 -m omafon.main --config config.festnetz.example.yaml --sim  # Festnetz-Simulator (Daten in ./sim-data)
 python3 -m omafon.main --config config.hybrid.example.yaml --sim    # Hybrid-Simulator
 sudo -u omafon python3 -m tools.prerender /etc/omafon/config.yaml  # Ansagen vorab rendern (Pi)
@@ -129,3 +135,10 @@ Im Simulator: Tasten `0-9 * #`, `a` Anrufen, `h` Auflegen, `m` Nachricht, `i` In
    nur über `phone.request_restart()` – das wartet, bis das Telefon in Ruhe ist.
 14. **Einstellungen der App liegen in `<data_dir>/config.yaml`** (`/etc` ist schreibgeschützt);
    diese Datei hat Vorrang vor `/etc/omafon/config.yaml`.
+15. **Nie eine geratene Uhrzeit ansagen.** Der Pi hat keine gepufferte Uhr; ohne Netz
+   nach dem Start sagt die Info-Taste „Die Uhrzeit ist noch nicht bekannt.“
+   (`Phone.time_known`). Fristen (Klingeln, Eingabe, Rückrufzeit, Gong) laufen über
+   `Phone.mono` – nie über die Wanduhr, die beim NTP-Abgleich springen kann.
+16. **App-Oberfläche: Bildschirmfotos ansehen.** Nach Änderungen an Bildschirmen
+   `UiFlowTest` laufen lassen und die Fotos prüfen. Jede Schaltfläche braucht einen
+   Namen für TalkBack (`LabeledFab`, Klick am `ListItem` statt an der Karte).

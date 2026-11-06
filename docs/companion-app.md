@@ -15,7 +15,7 @@ Die CI baut bei jedem Push eine Debug-APK (Artefakt `omafon-app-debug`).
 | Koppeln | Anleitung, Code-Eingabe, Kurzform des Zertifikats |
 | Übersicht | Akku, Verbindung, ungelesene Nachrichten, verpasste Anrufe, Zustand; Testansage; Neustart |
 | Einstellungen | alle Werte, die das Omafon anbietet, nach Gruppen; Speichern mit Neustart in Ruhe |
-| Kontakte | Name, Nummer, Sprachwahl-Wörter, Kurzwahl 1–9, Platz in der Notrufkette, E-Mail/Telegram |
+| Kontakte | Name, Nummer, Sprachwahl-Wörter, Kurzwahl 1–9, Platz in der Notrufkette, E-Mail/Telegram; „Aus dem Telefonbuch“ übernimmt einen Eintrag des Handys (ohne Kontakte-Berechtigung) |
 | Updates | installierte und verfügbare Version, Installieren mit Fortschritt, Zurück zur alten Version |
 | Gekoppelte Apps | wer verwalten darf; einzelne Handys entkoppeln |
 
@@ -130,9 +130,18 @@ sudo install -d -o omafon -g omafon -m 700 /data/omafon
 
 ```bash
 cd android
-./gradlew testDebugUnitTest      # Tests (JSON-Beispiele vom Omafon, TLS-Pinning, Regeln)
+./gradlew testDebugUnitTest      # Tests: JSON-Beispiele, TLS-Pinning, Regeln, Oberfläche
 ./gradlew assembleDebug          # app/build/outputs/apk/debug/app-debug.apk
 ```
+
+**Oberflächentests** (`UiFlowTest`, Robolectric): Sie bedienen die App wirklich –
+Gerät finden oder Adresse eingeben, koppeln (auch mit falschem Code), Übersicht,
+Einstellung ändern und speichern, Kontakte, Updates, gekoppelte Apps – gegen ein
+nachgebautes Omafon über HTTPS mit selbst signiertem Zertifikat, das dieselben
+JSON-Beispiele liefert. Jeder Schritt legt ein Bildschirmfoto ab
+(`android/app/build/screenshots/`, in der CI im Artefakt `android-berichte`).
+Nach Änderungen an der Oberfläche die Fotos ansehen. Robolectric lädt den
+Android-Rahmen über Gradle (offline-Modus, gecacht).
 
 Braucht JDK 17+ und das Android-SDK (`ANDROID_HOME` oder `local.properties`).
 Ändert sich die Schnittstelle, `python3 -m tools.api_fixtures` laufen lassen –
@@ -142,7 +151,8 @@ das erneuert die JSON-Beispiele unter `android/app/src/test/resources/api/`, und
 ## Offen
 
 - Release-Signatur der APK (eigener Keystore) und Verteilung (F-Droid/direkt).
-- Bedienung am echten Gerät und mit TalkBack noch nicht erprobt – getestet sind
-  Bau, Lint und die Unit-Tests.
+- Am echten Handy und mit TalkBack noch nicht erprobt. Die Oberflächentests prüfen
+  Abläufe und Beschriftungen (z. B. dass jede Schaltfläche einen Namen für TalkBack
+  hat), ersetzen das aber nicht.
 - Abhängigkeiten sind bewusst auf erprobte Versionen gepinnt (AGP 8.7, Compose
   BOM 2024.12); ein Sprung auf AGP 9 ist ein eigener Schritt.

@@ -40,8 +40,9 @@ Raspberry Pi Zero 2 W, Python 3 (asyncio), zwei Varianten:
   (Artefakt `omafon-stl`). Darin sind Tastenkappen ein- und zweifarbig, das Gehäuse
   und die Ladeschale je Variante sowie die Druck- und Montageanleitung
   ([docs/druckteile.md](docs/druckteile.md)). Gedruckt ist davon noch nichts.
-- **Android-App:** Die CI baut und testet sie (Artefakt `omafon-app-debug`);
-  an einem echten Handy ist sie noch nicht erprobt.
+- **Android-App:** Die CI baut und testet sie (Artefakt `omafon-app-debug`), auch die
+  Oberfläche: Robolectric-Tests bedienen alle Bildschirme und legen Bildschirmfotos ab
+  (Artefakt `android-berichte`). An einem echten Handy ist sie noch nicht erprobt.
 
 ## Neue Nachrichten
 
@@ -90,6 +91,7 @@ tests/test_omafon.py       Kern, Tasten, SMS, Notruf, Pinbelegung, Hardware-Ausf
 tests/test_festnetz.py     SIP-Backend, Fritz!Box, Ladeschale, Zweitanruf
 tests/test_hybrid.py       Routing, Notruf mit zweitem Weg, Zweitanruf, Sparmodus
 tests/test_admin.py        App-Schnittstelle, Koppeln, Updates und Rückfall
+tests/test_modem.py        echter AT-Treiber gegen nachgebaute serielle Leitung
 tests/test_fuzz.py         Zufallsfolgen von Tasten und Netz-Ereignissen gegen den Zustandsautomaten
 docs/                      Stückliste, Verkabelung, Festnetz-Recherche und -Hardware
 ```
