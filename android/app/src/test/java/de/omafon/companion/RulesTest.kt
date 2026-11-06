@@ -46,6 +46,14 @@ class RulesTest {
         assertEquals("3", formatNumber(i, 3.0))
     }
 
+    @Test fun addressBookEntry() {
+        assertEquals(Triple("Peter Müller", "+491711234567", "peter"),
+            ContactRules.fromAddressBook(" Peter Müller ", "+49 171 / 123-4567"))
+        assertEquals("", ContactRules.fromAddressBook("Dr. Weber", "0301").third)   // "dr." ist kein Wort
+        assertEquals(40, ContactRules.fromAddressBook("x".repeat(60), "0301").first.length)
+        assertEquals(Triple("", "", ""), ContactRules.fromAddressBook(null, null))
+    }
+
     @Test fun germanDates() {
         assertEquals("5.11.2026, 15:00", de.omafon.companion.ui.device.germanDate("2026-11-05T15:00:00"))
         assertEquals("5.11.2026", de.omafon.companion.ui.device.germanDate("2026-11-05T15:00:00", withTime = false))

@@ -1,6 +1,10 @@
 package de.omafon.companion.ui.device
 
 import android.app.Application
+import android.content.Intent
+import android.provider.ContactsContract.CommonDataKinds.Phone
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.outlined.Contacts
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Emergency
 import androidx.compose.material.icons.outlined.Person
@@ -97,6 +102,16 @@ object ContactRules {
     private val word = Regex("^[a-zäöüß]{2,20}$")
 
     fun cleanNumber(n: String) = n.replace(Regex("[\\s/()-]"), "")
+
+    /**
+     * Eintrag aus dem Telefonbuch des Handys übernehmen: Name gekürzt, Nummer
+     * bereinigt, Vorname als Sprachwahl-Wort vorgeschlagen ("Peter Müller" -> peter).
+     */
+    fun fromAddressBook(name: String?, number: String?): Triple<String, String, String> {
+        val n = name.orEmpty().trim().take(40)
+        val first = n.split(' ').firstOrNull()?.lowercase().orEmpty()
+        return Triple(n, cleanNumber(number.orEmpty()), if (word.matches(first)) first else "")
+    }
     fun words(text: String) = text.split(',', ' ', ';').map { it.trim().lowercase() }.filter { it.isNotEmpty() }
 
     fun problems(c: Contact, others: List<Contact>): List<String> = buildList {
@@ -202,6 +217,23 @@ private fun ContactDialog(
     var admin by remember { mutableStateOf(initial.admin) }
     var email by remember { mutableStateOf(initial.email.orEmpty()) }
     var telegram by remember { mutableStateOf(initial.telegramText) }
+    val context = LocalContext.current
+    var pickFailed by remember { mutableStateOf(false) }
+    // Auswahl einer Telefonnummer gibt der App nur diesen einen Eintrag frei –
+    // keine Berechtigung READ_CONTACTS nötig
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val uri = result.data?.data ?: return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.query(uri, arrayOf(Phone.DISPLAY_NAME, Phone.NUMBER), null, null, null)?.use { c ->
+                if (c.moveToFirst()) {
+                    val (n, nr, w) = ContactRules.fromAddressBook(c.getString(0), c.getString(1))
+                    if (n.isNotEmpty()) name = n
+                    if (nr.isNotEmpty()) number = nr
+                    if (spoken.isBlank() && w.isNotEmpty()) spoken = w
+                }
+            }
+        }.onFailure { pickFailed = true }
+    }
 
     val contact = Contact(
         name = name.trim(), number = ContactRules.cleanNumber(number), spoken = ContactRules.words(spoken),
@@ -216,6 +248,17 @@ private fun ContactDialog(
         title = { Text(if (isNew) "Neuer Kontakt" else "Kontakt bearbeiten") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                AssistChip(
+                    onClick = {
+                        pickFailed = runCatching {
+                            picker.launch(Intent(Intent.ACTION_PICK, Phone.CONTENT_URI))
+                        }.isFailure                                  // kein Telefonbuch auf dem Handy
+                    },
+                    label = { Text("Aus dem Telefonbuch") },
+                    leadingIcon = { Icon(Icons.Outlined.Contacts, null) },
+                )
+                if (pickFailed) Text("Telefonbuch lässt sich hier nicht öffnen – bitte eintippen.",
+                    color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(name, { name = it.take(40) }, label = { Text("Name (wird angesagt)") }, singleLine = true)
                 OutlinedTextField(number, { number = it }, label = { Text("Telefonnummer") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
