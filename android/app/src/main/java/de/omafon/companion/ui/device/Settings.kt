@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -19,7 +20,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -52,6 +53,7 @@ import de.omafon.companion.data.SettingsSchema
 import de.omafon.companion.ui.BackTopBar
 import de.omafon.companion.ui.CenteredProgress
 import de.omafon.companion.ui.ErrorPanel
+import de.omafon.companion.ui.LabeledFab
 import de.omafon.companion.ui.SectionCard
 import de.omafon.companion.ui.SectionTitle
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -123,11 +125,9 @@ fun SettingsScreen(deviceId: String, onBack: () -> Unit) {
         snackbarHost = { SnackbarHost(snack) },
         floatingActionButton = {
             if (edits.isNotEmpty()) {
-                ExtendedFloatingActionButton(
-                    onClick = { if (!saving) vm.save() },
-                    icon = { Icon(Icons.Filled.Check, null) },
-                    text = { Text(if (saving) "Speichert …" else "Speichern (${edits.size})") },
-                )
+                LabeledFab(if (saving) "Speichert …" else "Speichern (${edits.size})", Icons.Filled.Check) {
+                    if (!saving) vm.save()
+                }
             }
         },
     ) { pad ->
@@ -163,9 +163,16 @@ fun SettingEditor(item: SettingItem, value: JsonElement?, onChange: (JsonElement
             color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     when (item.type) {
-        "bool" -> Row(verticalAlignment = Alignment.CenterVertically) {
+        // Ganze Zeile schaltbar: größere Fläche, TalkBack liest Bezeichnung + Zustand zusammen
+        "bool" -> Row(
+            Modifier.fillMaxWidth().toggleable(
+                value = value.asBool(), role = Role.Switch,
+                onValueChange = { onChange(JsonPrimitive(it)) },
+            ),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Column(Modifier.weight(1f)) { title(); help() }
-            Switch(checked = value.asBool(), onCheckedChange = { onChange(JsonPrimitive(it)) })
+            Switch(checked = value.asBool(), onCheckedChange = null)
         }
         "int", "float" -> {
             val min = item.min ?: 0.0

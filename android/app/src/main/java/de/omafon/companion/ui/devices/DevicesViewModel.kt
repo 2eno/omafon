@@ -7,7 +7,6 @@ import de.omafon.companion.OmafonApp
 import de.omafon.companion.data.FoundDevice
 import de.omafon.companion.data.OmafonApi
 import de.omafon.companion.data.SavedDevice
-import de.omafon.companion.data.discoverOmafons
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -25,14 +24,20 @@ data class DevicesUi(
 )
 
 class DevicesViewModel(app: Application) : AndroidViewModel(app) {
-    private val store = (app as OmafonApp).container.store
+    private val container = (app as OmafonApp).container
+    private val store = container.store
     private val checked = mutableSetOf<String>()
     private val _foundSaved = MutableStateFlow<Map<String, String>>(emptyMap())   // host:port -> device_id
     private val searchError = MutableStateFlow<String?>(null)
 
-    private val discovery = discoverOmafons(app)
+    private val discovery = container.discovery()
         .onEach { list -> searchError.value = null; list.forEach { matchSaved(it) } }
-        .catch { e -> searchError.value = e.message ?: "Suche im WLAN geht gerade nicht"; emit(emptyList()) }
+        .catch { e ->
+            // Technische Meldung ins Log, für Menschen ein klarer Satz
+            android.util.Log.w("Omafon", "mDNS-Suche gescheitert", e)
+            searchError.value = "Die Suche im WLAN geht auf diesem Handy gerade nicht"
+            emit(emptyList())
+        }
 
     val ui: StateFlow<DevicesUi> = combine(store.devices, discovery, _foundSaved, searchError) { saved, found, known, err ->
         val savedIds = saved.map { it.id }.toSet()

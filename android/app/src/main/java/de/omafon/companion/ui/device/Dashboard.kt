@@ -60,6 +60,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.Hyphens
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -219,7 +221,14 @@ private fun Tile(modifier: Modifier, icon: ImageVector, value: String, label: St
     ElevatedCard(modifier, colors = androidx.compose.material3.CardDefaults.elevatedCardColors(containerColor = color)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Icon(icon, null)
-            Text(value, style = MaterialTheme.typography.headlineSmall)
+            // Zahlen groß; Wörter ("Verbunden") kleiner – sonst brach die halbe
+            // Bildschirmbreite eines kleinen Handys sie mitten im Wort um
+            val numeric = value.firstOrNull()?.isDigit() == true || value == "–"
+            Text(
+                value,
+                style = (if (numeric) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium)
+                    .copy(hyphens = Hyphens.Auto, lineBreak = LineBreak.Paragraph),
+            )
             Text(label, style = MaterialTheme.typography.bodyMedium)
         }
     }

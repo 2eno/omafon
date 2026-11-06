@@ -46,6 +46,12 @@ class RulesTest {
         assertEquals("3", formatNumber(i, 3.0))
     }
 
+    @Test fun germanDates() {
+        assertEquals("5.11.2026, 15:00", de.omafon.companion.ui.device.germanDate("2026-11-05T15:00:00"))
+        assertEquals("5.11.2026", de.omafon.companion.ui.device.germanDate("2026-11-05T15:00:00", withTime = false))
+        assertEquals("kaputt", de.omafon.companion.ui.device.germanDate("kaputt"))
+    }
+
     @Test fun statesFromPhonePy() {
         // Namen aus class S in omafon/phone.py
         listOf("idle", "entry", "voice_dial", "outgoing", "in_call", "ringing", "reading", "dictate", "confirm", "sos")

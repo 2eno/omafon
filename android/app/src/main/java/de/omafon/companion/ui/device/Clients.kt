@@ -39,6 +39,13 @@ import de.omafon.companion.ui.BackTopBar
 import de.omafon.companion.ui.CenteredProgress
 import de.omafon.companion.ui.ErrorPanel
 
+/** "2026-11-05T15:00:00" -> "5.11.2026, 15:00" (unlesbar: wie geliefert). */
+fun germanDate(iso: String, withTime: Boolean = true): String = runCatching {
+    val t = java.time.LocalDateTime.parse(iso.take(19))
+    val d = "${t.dayOfMonth}.${t.monthValue}.${t.year}"
+    if (withTime) d + ", %02d:%02d".format(t.hour, t.minute) else d
+}.getOrDefault(iso)
+
 class ClientsViewModel(app: Application, id: String) : DeviceViewModel<List<PairedClient>>(app, id) {
     override suspend fun fetch(api: OmafonApi) = api.clients().clients
 
@@ -80,8 +87,8 @@ fun ClientsScreen(deviceId: String, onBack: () -> Unit, onUnpairedSelf: () -> Un
                             leadingContent = { Icon(Icons.Outlined.PhoneAndroid, null) },
                             headlineContent = { Text(if (c.isThis) "${c.name} (dieses Handy)" else c.name) },
                             supportingContent = {
-                                Text("Gekoppelt ${c.created.take(10)}" +
-                                    if (c.lastSeen.isNotBlank()) " · zuletzt ${c.lastSeen.replace('T', ' ').take(16)}" else "")
+                                Text("Gekoppelt ${germanDate(c.created, withTime = false)}" +
+                                    if (c.lastSeen.isNotBlank()) " · zuletzt ${germanDate(c.lastSeen)}" else "")
                             },
                             trailingContent = {
                                 IconButton(onClick = { confirm = c }) { Icon(Icons.Outlined.LinkOff, "Entkoppeln") }

@@ -27,11 +27,14 @@ private val Dark = darkColorScheme(
     tertiary = Color(0xFFA7CCE1),
 )
 
-/** Material 3, ab Android 12 mit den Farben des Hintergrundbilds (Material You). */
+/**
+ * Material 3, ab Android 12 mit den Farben des Hintergrundbilds (Material You).
+ * dynamic = false: eigene Palette (wie auf Android 8–11) – für Bildschirmfotos.
+ */
 @Composable
-fun OmafonTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
+fun OmafonTheme(dark: Boolean = isSystemInDarkTheme(), dynamic: Boolean = true, content: @Composable () -> Unit) {
     val scheme = when {
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+        dynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
             if (dark) dynamicDarkColorScheme(LocalContext.current) else dynamicLightColorScheme(LocalContext.current)
         dark -> Dark
         else -> Light

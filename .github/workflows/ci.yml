@@ -109,8 +109,8 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
-      - name: Unit-Tests, Lint, Debug-APK
-        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
+      - name: Unit- und Oberflächentests (Robolectric), Lint, APKs
+        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug assembleRelease
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -118,6 +118,7 @@ jobs:
           path: |
             android/app/build/reports/
             android/app/build/test-results/
+            android/app/build/screenshots/
       - uses: actions/upload-artifact@v4
         with:
           name: omafon-app-debug

@@ -27,10 +27,10 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
@@ -48,6 +48,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -58,6 +59,7 @@ import de.omafon.companion.data.OmafonApi
 import de.omafon.companion.ui.BackTopBar
 import de.omafon.companion.ui.CenteredProgress
 import de.omafon.companion.ui.ErrorPanel
+import de.omafon.companion.ui.LabeledFab
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -134,9 +136,9 @@ fun ContactsScreen(deviceId: String, onBack: () -> Unit) {
         },
         snackbarHost = { SnackbarHost(snack) },
         floatingActionButton = {
-            if (list != null && list.size < 50) ExtendedFloatingActionButton(
-                onClick = { editing = null to Contact("", "") },
-                icon = { Icon(Icons.Filled.PersonAdd, null) }, text = { Text("Kontakt") })
+            if (list != null && list.size < 50) {
+                LabeledFab("Kontakt hinzufügen", Icons.Filled.PersonAdd) { editing = null to Contact("", "") }
+            }
         },
     ) { pad ->
         when {
@@ -150,8 +152,10 @@ fun ContactsScreen(deviceId: String, onBack: () -> Unit) {
             ) {
                 if (list.isEmpty()) item { Text("Noch keine Kontakte.", Modifier.padding(16.dp)) }
                 itemsIndexed(list) { i, c ->
-                    Card(Modifier.fillMaxWidth().clickable { editing = i to c }) {
-                        ListItem(
+                    Card(Modifier.fillMaxWidth()) {
+                        ListItem(                                   // Klick am ListItem (TalkBack, s. Geräteliste)
+                            modifier = Modifier.clickable { editing = i to c },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                             leadingContent = { Icon(if (c.emergency != null) Icons.Outlined.Emergency else Icons.Outlined.Person, null) },
                             headlineContent = { Text(c.name, style = MaterialTheme.typography.titleMedium) },
                             supportingContent = {

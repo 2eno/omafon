@@ -35,7 +35,11 @@ android {
         compose = true
     }
     testOptions {
-        unitTests.isReturnDefaultValues = true
+        unitTests {
+            isReturnDefaultValues = true
+            isIncludeAndroidResources = true      // Robolectric: Oberfläche mit echten Ressourcen
+            all { it.maxHeapSize = "2g" }
+        }
     }
 }
 
@@ -55,9 +59,35 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
     debugImplementation(libs.compose.ui.tooling)
+    debugImplementation(libs.compose.ui.test.manifest)
 
     testImplementation(libs.junit)
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.okhttp.tls)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Oberflächentests auf der JVM (Robolectric) mit Bildschirmfotos
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.androidx.test.ext.junit)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+}
+
+// Robolectric lädt den Android-Rahmen sonst erst im Test selbst aus dem Netz
+// (ohne Gradle-Cache, bricht bei Störungen von Maven Central ab). So holt ihn
+// Gradle wie jede Abhängigkeit, und Robolectric läuft offline.
+val robolectricRuntime: Configuration by configurations.creating
+dependencies {
+    robolectricRuntime(libs.robolectric.android.all)
+}
+val robolectricJars = layout.buildDirectory.dir("robolectric-jars")
+val copyRobolectricJars by tasks.registering(Copy::class) {
+    from(robolectricRuntime)
+    into(robolectricJars)
+}
+tasks.withType<Test>().configureEach {
+    dependsOn(copyRobolectricJars)
+    systemProperty("robolectric.offline", "true")
+    systemProperty("robolectric.pixelCopyRenderMode", "hardware")   // Bildschirmfotos (captureToImage)
+    systemProperty("robolectric.dependency.dir", robolectricJars.get().asFile.absolutePath)
 }

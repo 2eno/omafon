@@ -17,6 +17,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -25,8 +26,12 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.omafon.companion.AppContainer
 import de.omafon.companion.OmafonApp
@@ -57,11 +62,26 @@ fun container(): AppContainer = (LocalContext.current.applicationContext as Omaf
 @Composable
 fun BackTopBar(title: String, onBack: () -> Unit, actions: @Composable () -> Unit = {}) {
     TopAppBar(
-        title = { Text(title) },
+        title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         navigationIcon = {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") }
         },
         actions = { actions() },
+    )
+}
+
+/**
+ * Erweiterter FAB mit Beschriftung für TalkBack: Material 3 nimmt den Text eines
+ * ExtendedFloatingActionButton aus der Semantik – ohne contentDescription hörte
+ * man nur "Schaltfläche".
+ */
+@Composable
+fun LabeledFab(text: String, icon: ImageVector, onClick: () -> Unit) {
+    ExtendedFloatingActionButton(
+        onClick = onClick,
+        icon = { Icon(icon, null) },
+        text = { Text(text) },
+        modifier = Modifier.semantics { contentDescription = text },
     )
 }
 

@@ -33,7 +33,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -78,8 +81,12 @@ fun PairScreen(host: String, port: Int, name: String, onBack: () -> Unit, onPair
                             Row(verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Icon(Icons.Outlined.Lock, null, Modifier.size(16.dp))
-                                Text("Zertifikat ${PinningTrustManager.short(it)}",
-                                    style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                                Text(buildAnnotatedString {
+                                    append("Zertifikat ")
+                                    withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) {
+                                        append(PinningTrustManager.short(it))
+                                    }
+                                }, style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
