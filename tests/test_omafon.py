@@ -443,6 +443,67 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Neue Nachricht von Peter, am 1. 11. Alt", self.said())
         self.assertNotIn("..", self.said())
 
+    async def test_brief_sos_press_during_call_keeps_call(self):
+        self.modem.inject_call("+491711234567")
+        await self.pump()
+        await self.press("CALL")
+        self.assertEqual(self.phone.state, S.IN_CALL)
+        self.assertEqual(self.audio.route_mode, "earpiece")
+        self.phone.on_sos_key("SOS", "down")                   # Knopf aus Versehen gestreift
+        await self.pump(3)
+        self.phone.on_sos_key("SOS", "short")
+        await self.pump()
+        self.assertEqual(self.phone.state, S.IN_CALL)           # Gespräch läuft weiter …
+        self.assertEqual(self.audio.route_mode, "earpiece")     # … am Ohr, nicht laut
+        await self.press("HANGUP", held=0.6)                    # und lässt sich auflegen
+        self.assertEqual(self.phone.state, S.IDLE)
+        self.assertIn("AT+CHUP", self.modem.log)
+
+    async def test_brief_sos_press_while_ringing_keeps_ringing(self):
+        self.modem.inject_call("+491711234567")
+        await self.pump()
+        self.phone.on_sos_key("SOS", "down")
+        await self.pump(3)
+        self.phone.on_sos_key("SOS", "short")
+        await self.pump()
+        self.assertEqual(self.phone.state, S.RINGING)
+        await self.press("CALL")
+        self.assertEqual(self.phone.state, S.IN_CALL)
+
+    async def test_failed_dial_does_not_block_incoming_calls(self):
+        self.modem.csq = 0                                      # Wählen scheitert
+        await self.press("1", long=True)                        # Kurzwahl
+        await self.pump_until(lambda: P["not_reached"] in self.said())
+        self.assertIsNone(self.phone.call)
+        self.modem.csq = 22
+        self.modem.inject_call("+491609876543")
+        await self.pump()
+        self.assertEqual(self.phone.state, S.RINGING)           # klingelt wieder
+
+    async def test_ring_timeout_releases_backend(self):
+        self.modem.inject("ring")
+        await self.pump()
+        self.clock += dt.timedelta(seconds=9)                   # Klingeln hört ohne Meldung auf
+        self.q.put_nowait("tick")
+        await self.pump()
+        self.assertEqual(self.phone.state, S.IDLE)
+        self.assertIn("AT+CHUP", self.modem.log)
+
+    async def test_volume_restored_after_emergency(self):
+        self.audio.set_volume(2)
+        self.phone.state = S.SOS
+        self.phone.loud_for_emergency()
+        self.assertEqual(self.audio.volume, 5)
+        self.phone.callback_until = self.clock + dt.timedelta(minutes=30)
+        self.phone.go_idle()
+        self.q.put_nowait("tick")
+        await self.pump()
+        self.assertEqual(self.audio.volume, 5)                  # Rückrufzeit: noch laut
+        self.clock += dt.timedelta(minutes=31)
+        self.q.put_nowait("tick")
+        await self.pump()
+        self.assertEqual(self.audio.volume, 2)
+
     def test_texts_are_in_p_dict(self):
         """Regel 3: feste Ansagen nur in P (sonst fehlen sie im WAV-Cache)."""
         import re
@@ -450,6 +511,31 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
         body = src.split("class Phone", 1)[1]
         fixed = re.findall(r'(?:say|speak)\("([^"{]+)"\)', body)
         self.assertEqual(fixed, [], f"Feste Texte außerhalb von P: {fixed}")
+
+
+class ConfigTests(unittest.TestCase):
+    def load_with(self, extra: str):
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+            f.write(CFG.read_text(encoding="utf-8") + "\n" + extra + "\n")
+        try:
+            return config.load(f.name)
+        finally:
+            Path(f.name).unlink()
+
+    def test_bad_values_fail_at_start_with_clear_message(self):
+        for extra, word in (("quiet_hours: [22]", "quiet_hours"), ("volume: 9", "volume"),
+                            ("emergency_ring_seconds: dreißig", "emergency_ring_seconds"),
+                            ("default_route: laut", "default_route"),
+                            ("home_position: [51]", "home_position")):
+            with self.subTest(extra=extra), self.assertRaises(ValueError) as e:
+                self.load_with(extra)
+            self.assertIn(word, str(e.exception))
+
+    def test_duplicate_speed_dial(self):
+        cfg = config.load(CFG)
+        cfg.contacts[1].speed_dial = cfg.contacts[0].speed_dial
+        with self.assertRaises(ValueError):
+            config.validate(cfg)
 
 
 class HardwareTests(unittest.IsolatedAsyncioTestCase):

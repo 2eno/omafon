@@ -226,14 +226,29 @@ class HybridTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.sim.sip.notifier.sent, [])     # echte SMS, kein Push
 
     async def test_sos_at_home_calls_over_fritzbox_and_uses_home_position(self):
-        self.cfg.home_position = [50.1109, 8.6821]
+        self.cfg.home_position = [51.0, 10.0]          # Platzhalter, kein echter Ort
         self.q.put_nowait(KeyEvent("SOS", "down"))
         self.q.put_nowait(KeyEvent("SOS", "long"))
         self.assertTrue(await self.pump_until(lambda: "sip:+491711234567@fritz.box" in self.sip_dials(), 3000))
         self.sim.inject("call_begin")
         self.assertTrue(await self.pump_until(lambda: self.phone.call and self.phone.call.answered.is_set()))
         self.sim.inject("call_end")
-        self.assertTrue(await self.pump_until(lambda: any("mlat=50.11090" in t for _, t in self.sim.modem.sent)))
+        self.assertTrue(await self.pump_until(lambda: any("mlat=51.00000" in t for _, t in self.sim.modem.sent)))
+
+    async def test_sos_falls_back_when_fritzbox_drops_call_at_once(self):
+        """Regel 10: Festnetz nimmt den Ruf an, bricht ihn aber sofort ab (z. B. 503) –
+        der nächste Versuch muss über Mobilfunk gehen, nicht wieder ins Leere."""
+        self.cfg.emergency_rounds = 2
+        self.q.put_nowait(KeyEvent("SOS", "down"))
+        self.q.put_nowait(KeyEvent("SOS", "long"))
+        self.assertTrue(await self.pump_until(lambda: "sip:+491711234567@fritz.box" in self.sip_dials(), 3000))
+        self.sim.sip.inject("call_end")                     # sofort abgebrochen, nie angenommen
+        self.assertTrue(await self.pump_until(lambda: self.modem_dials(), 3000))
+        self.assertEqual(self.hy.active, "mobile")
+        self.assertEqual(self.hy._order("0301234"), ["mobile", "home"])
+        self.t += 601                                        # nach 10 Minuten wieder normal
+        self.assertEqual(self.hy._order("0301234"), ["home", "mobile"])
+        await self.press("HANGUP")
 
     async def test_power_saving_mode(self):
         self.hy.opt["home_modem"] = "off"

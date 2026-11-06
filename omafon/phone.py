@@ -141,6 +141,7 @@ class Phone:
         self.draft_text = ""
         self.callback_until: dt.datetime | None = None
         self.sos_counting = False
+        self.volume_before_sos: int | None = None
         self.battery_warned: set[int] = set()
         self.modem_failures = 0
         self.modem_retry_at: dt.datetime | None = None   # Modem tot: nächster stiller Versuch
@@ -199,6 +200,8 @@ class Phone:
         self.state = S.IDLE
         self.number = ""
         self.pending_dial = None
+        if self.call is not None and self.call.ended.is_set():
+            self.call = None                      # beendetes Gespräch nie liegen lassen
         self.audio.route("speaker")
 
     def name_or_number(self, number: str | None) -> str:
@@ -455,7 +458,10 @@ class Phone:
         elif k == "SOS" and kind == "short" and self.sos_counting:
             self.sos_counting = False          # zu früh losgelassen
             self.cancel_job()
-            self.go_idle()
+            if self.call is not None:          # Gespräch/Klingeln geht einfach weiter
+                self.audio.route(self.call_route())
+            else:
+                self.go_idle()
             self.speak(P["cancelled"])
         elif k == "SOS" and kind == "long":
             self.sos_counting = False
@@ -474,7 +480,7 @@ class Phone:
             await self.end_call(None)
             self.state = S.SOS
         self.audio.route("speaker")
-        self.audio.set_volume(5)
+        self.loud_for_emergency()
         await self.audio.tone("sos")
         await self.audio.say(P["sos_start"])
         await asyncio.sleep(self.cfg.sos_cancel_window_s)
@@ -488,7 +494,9 @@ class Phone:
             for name, number in targets:
                 await self.audio.say(f"Ich rufe {name} an.")
                 call = await self.place_call(number, speaker=True)
-                if await self.wait_answer(call, self.cfg.emergency_ring_seconds):
+                # 110/112 nie nach 30 s aufgeben – die Leitstelle nimmt ab, ggf. nach Warteschleife
+                wait = self.cfg.emergency_ring_seconds if number not in ("110", "112") else 180
+                if await self.wait_answer(call, wait):
                     await call.ended.wait()
                     self.callback_until = self.now() + dt.timedelta(
                         minutes=self.cfg.emergency_callback_minutes)
@@ -521,6 +529,12 @@ class Phone:
                 except ModemError:
                     pass
 
+    def loud_for_emergency(self) -> None:
+        """Im Notfall volle Lautstärke – danach (Rückrufzeit vorbei) wieder die eigene."""
+        if self.volume_before_sos is None:
+            self.volume_before_sos = self.audio.volume
+        self.audio.set_volume(5)
+
     def callback_active(self) -> bool:
         return bool(self.callback_until and self.now() < self.callback_until)
 
@@ -528,6 +542,14 @@ class Phone:
     def offline_phrase(self) -> str:
         """Ansage 'kein Netz' – der Text kommt aus P, das Backend wählt den Schlüssel."""
         return P.get(getattr(self.modem, "offline_key", "link_lost"), P["link_lost"])
+
+    def call_route(self) -> str:
+        """Tonweg für das laufende Gespräch (nach einer Unterbrechung wiederherstellen)."""
+        if self.state == S.RINGING or not self.call:
+            return "speaker"
+        if self.call.speaker or self.cfg.default_route == "speaker":
+            return "speaker"
+        return "earpiece"
 
     def docked_speaker(self) -> bool:
         """Steht das Telefon in der Ladeschale mit Lautsprecher -> freisprechen."""
@@ -568,6 +590,8 @@ class Phone:
             return
         call = await self.place_call(number)
         if call.ended.is_set():
+            if self.call is call:
+                self.call = None                  # sonst blockiert er alle eingehenden Anrufe
             self.go_idle()
             await self.audio.say(P["not_reached"])
 
@@ -635,6 +659,8 @@ class Phone:
         k = ev.kind
         if k == "ring":
             self.last_ring = self.now()
+            if self.call is not None and self.call.ended.is_set():
+                self.call = None                  # Rest eines beendeten Gesprächs
             if self.call is None:
                 self.call = Call(None, incoming=True)
                 if self.state != S.SOS:
@@ -647,7 +673,7 @@ class Phone:
             c = self.cfg.by_number(ev.data) if ev.data else None
             if c and c.emergency and (self.callback_active() or self.state == S.SOS):
                 self.call.speaker = True    # Rückruf im Notfall: sofort auf Lautsprecher
-                self.audio.set_volume(5)
+                self.loud_for_emergency()
                 await self.answer()
         elif k == "call_begin":
             if self.call:
@@ -773,7 +799,7 @@ class Phone:
         rssi = await self.modem.signal()
         unread = sum(not m["read"] for m in self.inbox)
         txt = (f"Omafon: Akku {b}%{' (laedt)' if self.hw.on_charger() else ''}, "
-               f"Empfang {rssi}/31, ungelesen {unread}, verpasst {len(self.missed)}.")
+               f"Empfang {'?' if rssi is None else rssi}/31, ungelesen {unread}, verpasst {len(self.missed)}.")
         try:
             await self.modem.send_sms(number, txt)
         except ModemError as e:
@@ -961,7 +987,17 @@ class Phone:
                 self.speak(P["not_sent"])
             self.go_idle()
         elif self.state == S.RINGING and (now - self.last_ring).total_seconds() > 8:
+            # Kein Klingeln mehr, aber auch kein Ende gemeldet: Backend freigeben,
+            # sonst gälte jeder spätere Anruf dort als Zweitanruf
+            try:
+                await self.modem.hangup()
+            except ModemError:
+                pass
             await self.on_call_gone("missed")
+        if (self.volume_before_sos is not None and self.state == S.IDLE
+                and not self.callback_active() and self.call is None):
+            self.audio.set_volume(self.volume_before_sos)
+            self.volume_before_sos = None
         for key, entry in list(self.partial.items()):     # unvollständige lange SMS
             if (now - entry["t"]).total_seconds() > 120:
                 del self.partial[key]

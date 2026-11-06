@@ -451,7 +451,9 @@ class AdminServer:
         """Prüfen (wie beim Start), dann atomar ersetzen. Alte Fassung -> .bak"""
         text = yaml.safe_dump(raw, allow_unicode=True, sort_keys=False, default_flow_style=None)
         probe = self.config_path.with_suffix(".probe.yaml")
-        probe.write_text(text, encoding="utf-8")
+        fd = os.open(probe, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)   # enthält Kennwörter
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
         try:
             config_mod.load(probe)
         except (ValueError, TypeError) as e:
@@ -460,8 +462,10 @@ class AdminServer:
             probe.unlink(missing_ok=True)
         shutil.copy2(self.config_path, self.config_path.with_suffix(".yaml.bak"))
         tmp = self.config_path.with_suffix(".tmp")
-        tmp.write_text(text, encoding="utf-8")
-        os.chmod(tmp, 0o600)                             # enthält Kennwörter
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)     # nie kurz lesbar
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.chmod(tmp, 0o600)                             # falls die Datei schon da war
         os.replace(tmp, self.config_path)
         log.info("Einstellungen gespeichert")
 

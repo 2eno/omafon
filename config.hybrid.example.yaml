@@ -47,7 +47,7 @@ notify:                        # nur wenn Mobilfunk fehlt: Push statt SMS – op
   smtp_password: null
   smtp_from: null
 
-home_position: null            # z. B. [50.1109, 8.6821] – dann steht ein Kartenlink im Notruf-Hinweis
+home_position: null            # z. B. [51.0, 10.0] (Breite, Länge) – dann steht ein Kartenlink im Notruf-Hinweis
 
 contacts:
   - name: Peter

@@ -40,6 +40,8 @@ HYBRID_DEFAULTS = {
     "no_network_grace_s": 10,      # erst danach "Kein Netz" ansagen
     "announce_mode": False,        # "Zu Hause …" / "Unterwegs …" ansagen
     "weak_wifi_dbm": -75,          # schwächeres WLAN (Garten, Wohnungsrand): lieber Mobilfunk
+    "fail_fast_s": 8,              # bricht ein Anruf so schnell ohne Annahme ab, ist der Weg gestört
+    "fail_memory_s": 600,          # so lange wird danach zuerst der andere Weg genommen
 }
 EMERGENCY = ("112", "110")
 CALL_EVENTS = ("call_begin", "call_end", "no_carrier", "busy", "no_answer", "missed")
@@ -71,6 +73,9 @@ class HybridBackend(TelephonyBackend):
         self.announced_down = False
         self.mode: str | None = None
         self.msg_map: dict[int, tuple[str, int]] = {}
+        self.dialed_at: float | None = None      # eigener Anruf: wann gewählt
+        self.answered = False                    # ... und schon angenommen?
+        self.leg_failed: dict[str, float] = {}   # Weg -> Zeitpunkt des letzten Fehlschlags
         self._next = 0
         self._tasks: list[asyncio.Task] = []
         self._last_poll = -1e9
@@ -166,8 +171,16 @@ class HybridBackend(TelephonyBackend):
         elif k in CALL_EVENTS:
             if self.active != name:              # Nachhall eines abgewiesenen Anrufs
                 return
-            if k != "call_begin":
-                self.active = None
+            if k == "call_begin":
+                self.answered = True
+            else:
+                # Eigener Anruf bricht kurz nach dem Wählen ohne Annahme ab (nicht
+                # "besetzt"): dieser Weg ist gestört -> nächstes Mal zuerst den anderen
+                if (self.dialed_at is not None and not self.answered and k != "busy"
+                        and self.clock() - self.dialed_at < float(self.opt["fail_fast_s"])):
+                    log.warning("Anruf über %s sofort abgebrochen (%s) – Weg gilt als gestört", name, k)
+                    self.leg_failed[name] = self.clock()
+                self.active, self.dialed_at = None, None
             self._emit(k, ev.data)
         else:
             self._emit(k, ev.data)
@@ -259,7 +272,11 @@ class HybridBackend(TelephonyBackend):
         first = self.opt["emergency_prefer"] if number in EMERGENCY else self.opt["prefer"]
         if first == "home" and self.home.online and self.mobile_ok and self.wifi_weak():
             first = "mobile"                     # Gespräch würde am WLAN-Rand abreißen
-        return [first, "mobile" if first == "home" else "home"]
+        other = "mobile" if first == "home" else "home"
+        failed = self.leg_failed.get(first)
+        if failed is not None and self.clock() - failed < float(self.opt["fail_memory_s"]):
+            first, other = other, first          # Regel 10: gestörten Weg erst als zweiten
+        return [first, other]
 
     async def dial(self, number: str) -> None:
         number = number.strip()
@@ -278,12 +295,13 @@ class HybridBackend(TelephonyBackend):
                     errors.append("kein Mobilfunknetz")
                     continue
             try:
-                self.active = name
+                self.active, self.answered, self.dialed_at = name, False, self.clock()
                 await self.leg(name).dial(number)
                 log.info("Wähle %s über %s", number, name)
                 return
             except ModemError as e:
-                self.active = None
+                self.active, self.dialed_at = None, None
+                self.leg_failed[name] = self.clock()
                 errors.append(f"{name}: {e}")
         raise ModemError("; ".join(errors) or "kein Weg zum Telefonieren")
 

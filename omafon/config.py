@@ -124,4 +124,49 @@ def load(path: str | Path) -> Config:
     unknown = set(raw) - set(known)
     if unknown:
         raise ValueError(f"Unbekannte Einstellungen in {path}: {', '.join(sorted(unknown))}")
-    return Config(contacts=contacts, **raw)
+    cfg = Config(contacts=contacts, **raw)
+    validate(cfg, path)
+    return cfg
+
+
+def validate(cfg: Config, path="config.yaml") -> None:
+    """Grobe Prüfung beim Laden. Ein Tippfehler soll beim Start mit klarer
+    Meldung auffallen – nicht später jede Sekunde im Takt (Ruhezeit) oder erst
+    im Notruf (Klingeldauer)."""
+    def bad(msg):
+        raise ValueError(f"{path}: {msg}")
+    qh = cfg.quiet_hours
+    if (not isinstance(qh, tuple) or len(qh) != 2
+            or not all(isinstance(h, int) and not isinstance(h, bool) and 0 <= h <= 23 for h in qh)):
+        bad("quiet_hours braucht zwei Stunden 0–23, z. B. [22, 7]")
+    if cfg.backend not in ("sip", "hybrid"):
+        bad("backend muss sip oder hybrid sein")
+    if cfg.default_route not in ("earpiece", "speaker"):
+        bad("default_route muss earpiece oder speaker sein")
+    numeric = {"volume": (1, 5), "emergency_ring_seconds": (5, 300), "emergency_rounds": (1, 10),
+               "emergency_callback_minutes": (0, 24 * 60), "news_signal_minutes": (0, 24 * 60),
+               "entry_timeout_s": (3, 600), "long_press_s": (0.3, 5), "hangup_hold_s": (0, 5),
+               "sos_hold_s": (0.5, 10), "sos_cancel_window_s": (0, 60), "speech_rate": (0.5, 3),
+               "link_reminder_minutes": (0, 24 * 60)}
+    for key, (lo, hi) in numeric.items():
+        v = getattr(cfg, key)
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not lo <= v <= hi:
+            bad(f"{key} muss eine Zahl zwischen {lo} und {hi} sein (ist {v!r})")
+    hp = cfg.home_position
+    if hp is not None and (not isinstance(hp, (list, tuple)) or len(hp) != 2 or not all(
+            isinstance(x, (int, float)) and not isinstance(x, bool) for x in hp)
+            or not (-90 <= hp[0] <= 90 and -180 <= hp[1] <= 180)):
+        bad("home_position braucht [Breite, Länge], z. B. [51.0, 10.0]")
+    seen_speed, seen_em = set(), set()
+    for c in cfg.contacts:
+        if not str(c.name or "").strip() or not str(c.number or "").strip():
+            bad("jeder Kontakt braucht name und number")
+        if not isinstance(c.spoken, list):
+            bad(f"{c.name}: spoken muss eine Liste sein, z. B. [peter, sohn]")
+        for attr, seen, hi in (("speed_dial", seen_speed, 9), ("emergency", seen_em, 99)):
+            v = getattr(c, attr)
+            if v is None:
+                continue
+            if isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= hi or v in seen:
+                bad(f"{c.name}: {attr} muss 1–{hi} sein und darf nur einmal vorkommen")
+            seen.add(v)
