@@ -188,6 +188,10 @@ auf dem Pi mit einem kurzen Python-Aufruf von `Recognizer.listen_name()`.
 - Bestätigung "Taste 1 drücken" beim Notruf-Empfänger (DTMF-Erkennung prüfen).
 - Echte Lastmessung für die Akkulaufzeit.
 - TPA2016-Registerwerte am echten Chip prüfen (Kommentar in `audio.py`).
+- **Uhrzeit ohne Netz:** Der Pi hat keine gepufferte Uhr. Startet das Hybrid-Gerät
+  unterwegs ohne WLAN, stimmen Uhrzeit-Ansage und Ruhezeit erst, wenn es Zeit aus dem
+  Netz bekommt. Abhilfe: RTC-Modul (z. B. DS3231) oder Netzzeit vom Modem
+  (`AT+CTZU=1`, `AT+CCLK?`) übernehmen – noch nicht umgesetzt.
 
 ## Lizenz
 

@@ -103,6 +103,10 @@ object ContactRules {
         if (c.spoken.any { !word.matches(it) }) add("Sprachwahl: nur Wörter aus Buchstaben")
         if (c.speedDial != null && others.any { it.speedDial == c.speedDial }) add("Kurzwahl ${c.speedDial} ist schon vergeben")
         if (c.emergency != null && others.any { it.emergency == c.emergency }) add("Notruf-Platz ${c.emergency} ist schon vergeben")
+        val mine = c.spoken.ifEmpty { listOf(c.name.lowercase()) }
+        others.firstOrNull { o -> o.spoken.ifEmpty { listOf(o.name.lowercase()) }.any { it in mine } }?.let {
+            add("Sprachwahl-Wort schon bei ${it.name} – sonst wüsste das Omafon nicht, wen")
+        }
     }
 }
 

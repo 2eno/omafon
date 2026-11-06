@@ -215,7 +215,7 @@ _NUMBER = re.compile(r"^\+?[0-9*#]{2,20}$")
 def validate_contacts(items) -> list[dict]:
     if not isinstance(items, list) or len(items) > 50:
         raise ApiError(400, "Kontaktliste erwartet (höchstens 50)")
-    out, speed, emerg = [], set(), set()
+    out, speed, emerg, said = [], set(), set(), {}
     for i, c in enumerate(items, 1):
         if not isinstance(c, dict):
             raise ApiError(400, f"Kontakt {i}: ungültig")
@@ -234,6 +234,10 @@ def validate_contacts(items) -> list[dict]:
             raise ApiError(400, f"{name}: Sprachwahl-Wörter nur aus Buchstaben")
         if words:
             d["spoken"] = words
+        for w in words or [name.lower()]:      # ohne Wörter zählt der Name (config.Contact.words)
+            if w in said and said[w] != name:
+                raise ApiError(400, f"„{w}“ steht bei {said[w]} und {name} – Sprachwahl wüsste nicht, wen")
+            said[w] = name
         sd = c.get("speed_dial")
         if sd is not None:
             if not isinstance(sd, int) or isinstance(sd, bool) or not 1 <= sd <= 9 or sd in speed:

@@ -469,6 +469,15 @@ class UpdateTests(unittest.TestCase):
             Updater(self.data, __version__).check()
 
 
+class ContactRuleTests(unittest.TestCase):
+    def test_voice_words_unique(self):
+        with self.assertRaises(ApiError) as e:
+            validate_contacts([{"name": "Maria", "number": "0301", "spoken": ["tochter"]},
+                               {"name": "Tina", "number": "0302", "spoken": ["tochter"]}])
+        self.assertIn("tochter", e.exception.message)
+        validate_contacts([{"name": "Maria", "number": "0301"}, {"name": "Tina", "number": "0302"}])
+
+
 class RobustApiTests(AdminBase):
     """Gefunden mit einem HTTP-Fuzzer: nie 500, immer eine verständliche 400."""
 

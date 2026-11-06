@@ -26,6 +26,13 @@ class RulesTest {
         assertTrue(ContactRules.problems(Contact("Peter", "0171", speedDial = 3, emergency = 2), others).isEmpty())
     }
 
+    @Test fun spokenWordsMustBeUnique() {
+        val others = listOf(Contact("Maria", "0301", spoken = listOf("maria", "tochter")))
+        assertTrue(ContactRules.problems(Contact("Tina", "0302", spoken = listOf("tochter")), others).isNotEmpty())
+        assertTrue(ContactRules.problems(Contact("Maria", "0302"), others).isNotEmpty())   // Name zählt
+        assertTrue(ContactRules.problems(Contact("Tina", "0302", spoken = listOf("tina")), others).isEmpty())
+    }
+
     @Test fun spokenWords() {
         assertEquals(listOf("peter", "sohn"), ContactRules.words("Peter, Sohn"))
         assertTrue(ContactRules.problems(Contact("P", "0171", spoken = listOf("p3ter")), emptyList()).isNotEmpty())

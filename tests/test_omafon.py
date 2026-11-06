@@ -366,6 +366,9 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
         sms_to = {n for n, _ in self.modem.sent}
         self.assertEqual(sms_to, {"+491711234567", "+491609876543", "+491525550000"})
         self.assertTrue(any("openstreetmap" in t for _, t in self.modem.sent))
+        first_dial = self.modem.log.index("ATD+491711234567;")
+        first_sms = next(i for i, m in enumerate(self.modem.log) if m.startswith("SMS an"))
+        self.assertLess(first_dial, first_sms)                 # Anruf zuerst, SMS danach
         # Rückruf von Peter wird automatisch angenommen
         self.modem.inject_call("+491711234567")
         await self.pump()

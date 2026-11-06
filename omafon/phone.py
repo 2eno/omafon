@@ -465,10 +465,13 @@ class Phone:
 
     async def sos_countdown(self) -> None:
         self.audio.route("speaker")
+        # Takt passend zu sos_hold_s: "eins" fällt kurz vor dem Auslösen
+        # (Wort + Piep dauern etwa 0,55 s, der Rest ist Pause)
+        pause = max(0.1, float(self.cfg.sos_hold_s) / 3 - 0.55)
         for word in ("drei", "zwo", "eins"):
             await self.audio.say(word)
             await self.audio.tone("beep")
-            await asyncio.sleep(0.6)
+            await asyncio.sleep(pause)
 
     async def sos_job(self) -> None:
         self.state = S.SOS
@@ -483,13 +486,17 @@ class Phone:
         await self.audio.say(P["sos_running"])
         if not self.modem.online:                     # trotzdem versuchen – vielleicht gleich wieder da
             await self.audio.say(self.offline_phrase())
-        self.bg(self.sos_sms())            # läuft unabhängig weiter
         chain = self.cfg.emergency_chain()
         targets = [(c.name, c.number) for c in chain] or [("den Notruf", "112")]
+        sms = None
         for _round in range(self.cfg.emergency_rounds):
             for name, number in targets:
                 await self.audio.say(f"Ich rufe {name} an.")
                 call = await self.place_call(number, speaker=True)
+                if sms is None:
+                    # Erst wählen, dann die SMS: beide teilen sich die serielle Leitung
+                    # zum Modem – sonst wartete der Anruf, bis alle SMS draußen sind.
+                    sms = self.bg(self.sos_sms())        # läuft unabhängig weiter
                 # 110/112 nie nach 30 s aufgeben – die Leitstelle nimmt ab, ggf. nach Warteschleife
                 wait = self.cfg.emergency_ring_seconds if number not in ("110", "112") else 180
                 if await self.wait_answer(call, wait):
