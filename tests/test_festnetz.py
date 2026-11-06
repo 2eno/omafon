@@ -402,6 +402,15 @@ class FestnetzPhoneTests(Base):
         self.hw.press(key, long, held)
         await self.pump()
 
+    async def test_voice_dial_without_link_says_so_at_once(self):
+        await self.sim.server.set_reachable(False)
+        self.assertTrue(await self.until(lambda: not self.backend.online))
+        self.audio.spoken.clear()
+        self.hw.press("CALL")
+        await self.pump()
+        self.assertIn(P["link_lost"], self.audio.spoken)
+        self.assertNotIn(P["who_call"], self.audio.spoken)
+
     async def test_call_out_and_hang_up(self):
         for d in "0301234":
             await self.press(d)

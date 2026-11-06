@@ -227,11 +227,7 @@ class Phone:
     async def startup(self) -> None:
         self.audio.route("speaker")
         self.audio.set_volume(self.cfg.volume)
-        try:
-            for idx in await self.modem.stored_indices():
-                await self.on_sms(idx, announce=False)
-        except ModemError as e:
-            log.warning("Gespeicherte SMS nicht lesbar: %s", e)
+        await self.collect_stored(announce=False)
         await self.audio.say(P["ready"])
         if self.unread_count():
             self.next_news_signal = self.now()          # beim nächsten Takt ankündigen
@@ -727,6 +723,23 @@ class Phone:
             self.speak(P["call_ended"])
 
     # ================================================================ SMS
+    async def collect_stored(self, announce: bool = True) -> int:
+        """Gespeicherte Nachrichten abholen (beim Start und ab und zu in Ruhe):
+        was einmal nicht lesbar war, bleibt im Speicher und kommt hier nach."""
+        try:
+            indices = await self.modem.stored_indices()
+        except ModemError as e:
+            log.warning("Gespeicherte SMS nicht abrufbar: %s", e)
+            return 0
+        n = 0
+        for idx in indices:
+            try:
+                await self.on_sms(idx, announce=announce)
+                n += 1
+            except ModemError as e:              # eine kaputte blockiert nicht die anderen
+                log.warning("SMS %s nicht lesbar: %s", idx, e)
+        return n
+
     async def on_sms(self, index: int, announce: bool = True) -> None:
         d = await self.modem.read_sms(index)
         await self.modem.delete_sms(index)
@@ -859,6 +872,9 @@ class Phone:
         return [w for c in self.cfg.contacts for w in c.words()]
 
     async def voice_dial_job(self) -> None:
+        if not self.modem.online:                  # Regel 8: sofort sagen, nicht erst nach dem Namen
+            self.go_idle()
+            return await self.audio.say(self.offline_phrase())
         self.state = S.VOICE_DIAL
         self.audio.route("speaker")
         await self.audio.say(P["who_call"])
@@ -939,10 +955,13 @@ class Phone:
         return self.state == S.IDLE and not (self.job and not self.job.done()) and self.call is None
 
     def speak_key(self, key: str) -> None:
-        self.speak(P[key])
+        """Hinweise der App-Verwaltung: nie mitten ins Gespräch, Klingeln oder den Notruf
+        (die App zeigt dasselbe ohnehin an)."""
+        if self.state in (S.IDLE, S.ENTRY, S.READING) and self.call is None:
+            self.speak(P[key])
 
     def paired(self, name: str) -> None:
-        self.speak(P["pair_done"])
+        self.speak_key("pair_done")
 
     async def pair_job(self) -> None:
         if self.admin is None:
@@ -1014,8 +1033,11 @@ class Phone:
         if self.ticks % 60 == 0:
             await self.check_battery()
             await self.check_modem()
-        if self.ticks % 600 == 0 and idle_s > 600:
-            self.stt.unload()
+        if self.ticks % 600 == 0:
+            if idle_s > 600:
+                self.stt.unload()
+            if self.state == S.IDLE and not (self.job and not self.job.done()):
+                await self.collect_stored()       # liegen gebliebene SMS nachholen
 
     async def check_battery(self) -> None:
         b = self.hw.battery_percent()

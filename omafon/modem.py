@@ -198,7 +198,10 @@ class Modem(TelephonyBackend):
         lines = await self.cmd(f"AT+CMGR={index}", prefix="+CMGR")
         hexline = next((l for l in lines if not l.startswith("+CMGR")), None)
         if not hexline:
-            return None
+            # Leere Antwort heißt nicht "keine SMS": oft ein verspätetes OK eines
+            # früheren Befehls. Dann NICHT löschen lassen – beim nächsten Start
+            # liest stored_indices() sie erneut.
+            raise ModemError(f"SMS {index}: keine Daten (Modem antwortete leer)")
         try:
             return pdu.decode_deliver(hexline)
         except (ValueError, IndexError) as e:

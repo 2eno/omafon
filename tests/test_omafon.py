@@ -521,6 +521,24 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
         hang.set()
         await task
 
+    async def test_sms_not_deleted_when_modem_answers_empty(self):
+        self.modem.inject_sms("+491711234567", "Wichtig")
+        real_read = self.modem.read_sms
+        from omafon.modem import ModemError as ME
+
+        async def empty_read(i):
+            raise ME("keine Daten")                               # verspätetes OK o. Ä.
+        self.modem.read_sms = empty_read
+        await self.pump()
+        self.assertEqual(self.phone.inbox, [])
+        self.assertEqual(len(self.modem.store), 1)                # liegt noch auf der SIM
+        self.modem.read_sms = real_read
+        self.phone.ticks = 599                                    # 10 Minuten später, in Ruhe
+        self.q.put_nowait("tick")
+        await self.pump()
+        self.assertEqual(self.phone.inbox[0]["text"], "Wichtig")
+        self.assertEqual(self.modem.store, {})
+
     def test_texts_are_in_p_dict(self):
         """Regel 3: feste Ansagen nur in P (sonst fehlen sie im WAV-Cache)."""
         import re

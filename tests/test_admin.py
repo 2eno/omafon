@@ -127,6 +127,15 @@ class PairingTests(AdminBase):
         digits = " | ".join(DIGIT_WORDS[d] for d in self.admin.pair_code)
         self.assertEqual(said.count(digits), 2, said)          # Code zweimal, Ziffer für Ziffer
 
+    async def test_no_app_notice_during_call(self):
+        code = self.admin.open_pairing()
+        self.modem.inject_call("+491711234567")
+        await self.pump()
+        self.audio.spoken.clear()
+        self.admin.pair(code, "Testhandy")
+        await self.pump()
+        self.assertNotIn(P["pair_done"], self.audio.spoken)
+
     async def test_clients_list_and_unpair(self):
         tok = self.token()
         other = self.token()
@@ -508,6 +517,38 @@ class UpdateApiTests(AdminBase):
         self.cfg_path.write_text(text, encoding="utf-8")
         items = {i["key"]: i for g in self.admin.settings()["groups"] for i in g["items"]}
         self.assertEqual(items["hybrid.home_modem"]["value"], "off")
+
+
+@unittest.skipUnless(HAVE_CRYPTO, "cryptography fehlt")
+class ReleaseToolTests(unittest.TestCase):
+    """tools/make_release.py baut, was der Updater annimmt – Ende zu Ende."""
+
+    def test_keygen_build_check_install(self):
+        import contextlib
+        import io as _io
+        import tools.make_release as mr
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            out = _io.StringIO()
+            with contextlib.redirect_stdout(out):
+                mr.main(["keygen", str(d / "keys")])
+            pub = out.getvalue().split('update_public_key: "')[1].split('"')[0]
+            self.assertEqual(oct((d / "keys" / "omafon_update.key").stat().st_mode & 0o777), "0o600")
+            with self.assertRaises(SystemExit):              # nie überschreiben
+                with contextlib.redirect_stdout(_io.StringIO()):
+                    mr.main(["keygen", str(d / "keys")])
+            with contextlib.redirect_stdout(_io.StringIO()):
+                mr.main(["build", "--key", str(d / "keys" / "omafon_update.key"),
+                         "--base-url", "https://updates.example.invalid/o/", "--notes", "Test",
+                         "--out", str(d / "dist")])
+            self.assertEqual(mr.package(), mr.package())     # reproduzierbar
+            files = {"https://updates.example.invalid/o/manifest.json": (d / "dist" / "manifest.json").read_bytes(),
+                     f"https://updates.example.invalid/o/omafon-{__version__}.tar.gz":
+                     (d / "dist" / f"omafon-{__version__}.tar.gz").read_bytes()}
+            up = Updater(d / "data", "0.0.1", "https://updates.example.invalid/o/manifest.json", pub,
+                         opener=lambda url, timeout: io.BytesIO(files[url]))
+            self.assertTrue(up.check()["update_available"])
+            self.assertEqual(up.install(), __version__)      # Signatur, Prüfsumme, Importtest
 
 
 class SavedConfigTests(unittest.TestCase):
