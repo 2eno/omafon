@@ -156,6 +156,11 @@ fun DashboardScreen(
                             Text("Neustart wartet, bis das Telefon in Ruhe ist.",
                                 color = MaterialTheme.colorScheme.tertiary)
                         }
+                        if (!s.timeKnown) {
+                            Text("Uhrzeit am Omafon noch unbekannt (kein WLAN/Netz seit dem Einschalten). " +
+                                "Die Info-Taste sagt sie erst an, wenn sie stimmt.",
+                                color = MaterialTheme.colorScheme.error)
+                        }
                     }
                     SpeakCard(enabled = s.state == "idle", onSpeak = vm::speak)
                     ElevatedCard(Modifier.fillMaxWidth()) {

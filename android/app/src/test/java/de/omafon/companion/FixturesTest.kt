@@ -43,6 +43,7 @@ class FixturesTest {
         val s = ApiJson.decodeFromString<DeviceStatus>(read("status.json"))
         assertEquals("idle", s.state)
         assertNotNull(s.battery)
+        assertTrue(s.timeKnown)
         val u = requireNotNull(s.update)
         assertTrue(u.updateAvailable)
         assertEquals("0.10.0", u.available?.version)

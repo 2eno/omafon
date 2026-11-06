@@ -24,5 +24,23 @@ RestartSec=2
 Nice=-5
 CacheDirectory=omafon
 
+# Härtung – nur Optionen, die GPIO/I²C, Audio, serielle Schnittstelle, Netz,
+# D-Bus/polkit (WLAN-Neustart) und Updates in /data nicht stören.
+# Bewusst NICHT gesetzt: SystemCallArchitectures=native (32-Bit-System auf
+# 64-Bit-Kernel, Standard beim Zero 2 mit 32-Bit-OS, liefe gar nicht mehr),
+# ProtectKernelTunables (sysfs-GPIO), MemoryDenyWriteExecute (Piper/onnxruntime),
+# ProtectClock (Uhr-Prüfung per adjtimex, omafon/clock.py).
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+# Neue Dateien (Posteingang, Aufnahmen, Einstellungen) nur für den Dienst lesbar
+UMask=0077
+
 [Install]
 WantedBy=multi-user.target

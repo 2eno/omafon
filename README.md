@@ -166,12 +166,17 @@ aktualisieren oder beim SIMCom-Support nach dem passenden VoLTE-Profil fragen.
 5. **Vosk-Modell** `vosk-model-small-de-0.15` nach `/opt/omafon/` entpacken.
 6. Code nach `/opt/omafon`, Konfiguration nach `/etc/omafon/config.yaml`, Benutzer
    `omafon` anlegen (Gruppen audio, dialout, gpio, i2c), Datenpartition `/data`.
-7. `sudo python3 -m tools.prerender /etc/omafon/config.yaml` – erzeugt alle festen Ansagen.
+7. `sudo -u omafon python3 -m tools.prerender /etc/omafon/config.yaml` – erzeugt alle festen Ansagen.
 8. `sudo cp systemd/omafon.service /etc/systemd/system/ && sudo systemctl enable --now omafon`
    und für die App `sudo cp systemd/omafon.avahi.xml /etc/avahi/services/omafon.service`.
    Damit das Telefon bei hängender Fritz!Box-Verbindung das WLAN selbst neu starten
    darf: `sudo cp systemd/omafon-polkit.rules /etc/polkit-1/rules.d/50-omafon.rules`.
-   Der Dienst startet über `systemd/omafon-start.sh` (aktive Version, Rückfall nach Updates).
+   Soundkarte teilen (sonst fallen im Festnetz-Gespräch alle Ansagen aus):
+   `sudo cp systemd/omafon-asound.conf /etc/asound.conf`, prüfen mit `aplay -L | grep omafon`.
+   Der Dienst startet über `systemd/omafon-start.sh` (aktive Version, Rückfall nach Updates)
+   und läuft abgeschottet (systemd-Härtung, `systemd-analyze security omafon`: 6,9 statt 9,0).
+   Sollte am echten Gerät etwas daran scheitern, steht im Kommentar der Dienstdatei, was
+   bewusst weggelassen wurde.
 9. Zum Schluss `raspi-config` → Performance → **Overlay File System** an. Das System
    ist dann schreibgeschützt und übersteht Stromausfälle. Nur `/data` bleibt beschreibbar –
    dort speichert die App Einstellungen (`/data/omafon/config.yaml`) und Updates.

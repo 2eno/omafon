@@ -110,6 +110,10 @@ class TelephonyBackend:
     async def gps_position(self, timeout: float = 30) -> tuple[float, float] | None:
         return None
 
+    async def network_time(self):
+        """Uhrzeit aus dem Netz (Mobilfunk: NITZ) als naive Ortszeit, None = keine."""
+        return None
+
 
 BACKENDS = ("sip", "hybrid")
 

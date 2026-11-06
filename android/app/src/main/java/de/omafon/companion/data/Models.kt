@@ -67,6 +67,7 @@ data class DeviceStatus(
     val unread: Int = 0,
     val missed: Int = 0,
     @SerialName("restart_pending") val restartPending: Boolean = false,
+    @SerialName("time_known") val timeKnown: Boolean = true,   // ältere Omafone senden es nicht
     val update: UpdateInfo? = null,
 )
 

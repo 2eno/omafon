@@ -79,6 +79,7 @@ P = {
     "sos_nobody": "Ich habe niemanden erreicht. Alle Notfallkontakte haben eine SMS bekommen.",
     "modem_restart": "Das Mobilfunkteil startet neu. Bitte einen Moment warten.",
     "modem_dead": "Achtung, Telefonieren ist gerade nicht möglich.",
+    "time_unknown": "Die Uhrzeit ist noch nicht bekannt.",
     "error": "Es ist ein Fehler aufgetreten.",
     "not_sent": "Nachricht wurde nicht gesendet.",
     # Festnetz (backend: sip)
@@ -104,6 +105,47 @@ P = {
 }
 
 
+def clean_inbox(raw) -> list[dict]:
+    """Posteingang aus der Datei prüfen: kaputte oder alte Einträge (fehlende
+    Felder) würden sonst jede Sekunde im Takt einen Fehler werfen."""
+    out = []
+    for m in raw if isinstance(raw, list) else []:
+        if not isinstance(m, dict) or not isinstance(m.get("text"), str):
+            continue
+        msg = {"sender": str(m.get("sender") or ""), "text": m["text"],
+               "time": str(m.get("time") or ""), "read": bool(m.get("read", True))}
+        if isinstance(m.get("audio"), str) and m["audio"]:
+            msg["audio"] = m["audio"]
+        out.append(msg)
+    return out[:50]
+
+
+def clean_missed(raw) -> list[dict]:
+    out = []
+    for m in raw if isinstance(raw, list) else []:
+        if isinstance(m, dict):
+            n = m.get("number")
+            out.append({"number": n if isinstance(n, str) and n else None, "time": str(m.get("time") or "")})
+    return out[-20:]
+
+
+def fixed_phrases(cfg) -> list[str]:
+    """Alle Ansagen, die sofort kommen müssen (Regel 1/3) – genau so, wie Phone
+    sie spricht. Dauerhaft im Cache: tools/prerender.py erzeugt sie vorab, im
+    Betrieb rendert Phone Fehlendes im Leerlauf nach (z. B. neuer Kontakt per App)."""
+    out = list(DIGIT_WORDS.values()) + list(P.values())
+    out += ["drei", "zwo", "eins"] + [f"Lautstärke {i}." for i in range(1, 6)]
+    for d in DIGIT_WORDS.values():
+        out.append(f"Auf Taste {d} ist niemand gespeichert.")
+    names = [c.name for c in cfg.contacts]
+    for name in names:
+        out += [f"Anruf von {name}.", f"Ich rufe {name} an.",
+                f"{name}. Gelbe Taste zum Anrufen.", f"Verpasster Anruf von {name}."]
+    for name in sorted(set((cfg.phonebook or {}).values()) - set(names)):
+        out += [f"Anruf von {name}.", f"Verpasster Anruf von {name}."]
+    return list(dict.fromkeys(out))
+
+
 @dataclass
 class Call:
     number: str | None
@@ -116,42 +158,50 @@ class Call:
 
 
 class Phone:
-    def __init__(self, cfg, audio, modem, stt, hw, events: asyncio.Queue, clock=dt.datetime.now):
+    def __init__(self, cfg, audio, modem, stt, hw, events: asyncio.Queue, clock=dt.datetime.now,
+                 monotonic=None, time_known=None):
+        """clock: Wanduhr (Ansagen, Ruhezeit, Zeitstempel). monotonic: Sekundenzähler
+        für Fristen – springt nie, auch wenn die Uhr nach dem Start per NTP oder
+        Netzzeit um Tage springt (Standard: aus clock abgeleitet, für Tests).
+        time_known: ist die Wanduhr verlässlich? (omafon.clock.Clock.known)"""
         self.cfg, self.audio, self.modem, self.stt, self.hw = cfg, audio, modem, stt, hw
         self.events, self.now = events, clock
+        self.mono = monotonic or (lambda: clock().timestamp())
+        self.time_known = time_known or (lambda: True)
         self.state = S.IDLE
         self.number = ""
         self.call: Call | None = None
         self.job: asyncio.Task | None = None
         self.ring_task: asyncio.Task | None = None
         self._bg: set[asyncio.Task] = set()
-        self.last_activity = self.now()
-        self.last_ring = self.now()
+        self.last_activity = self.mono()
+        self.last_ring = self.mono()
         self.data = Path(cfg.data_dir)
         self.data.mkdir(parents=True, exist_ok=True)
-        self.inbox: list[dict] = self._load("inbox.json", [])
-        self.missed: list[dict] = self._load("missed.json", [])
+        self.inbox: list[dict] = clean_inbox(self._load("inbox.json", []))
+        self.missed: list[dict] = clean_missed(self._load("missed.json", []))
         self.partial: dict[tuple, dict] = {}
         self.playlist: list[dict] = []     # Nachrichten selbst, nicht Indizes: neue SMS rücken vorn ein
         self.read_pos = 0
-        self.next_news_signal: dt.datetime | None = None   # nächster Erinnerungs-Gong
+        self.next_news_signal: float | None = None   # nächster Erinnerungs-Gong (monoton)
         self.led_on = False
         self.pending_dial: str | None = None
         self.draft_to: str | None = None
         self.draft_text = ""
-        self.callback_until: dt.datetime | None = None
+        self.callback_until: float | None = None     # Rückrufe annehmen bis (monoton)
         self.sos_counting = False
         self.volume_before_sos: int | None = None
         self.battery_warned: set[int] = set()
         self.modem_failures = 0
-        self.modem_retry_at: dt.datetime | None = None   # Modem tot: nächster stiller Versuch
+        self.modem_retry_at: float | None = None     # Modem tot: nächster stiller Versuch
         self.modem_dead_announced = False
         self.ticks = 0
-        self.link_reminder: dt.datetime | None = None    # Verbindung weg: nächste Erinnerung
+        self.link_reminder: float | None = None      # Verbindung weg: nächste Erinnerung
         self.admin = None                    # AdminServer (Companion-App), setzt main.py
         self.restart_reason: str | None = None
         self.restart_event = asyncio.Event()
         self.pause_s = 1.0               # Pause zwischen Wiederholungen (Tests: kürzer)
+        self.render_task: asyncio.Task | None = None
 
     # ================================================================ Grundlagen
     def _load(self, name, default):
@@ -210,6 +260,10 @@ class Phone:
         return self.cfg.name_for(number) or spoken_number(number)
 
     def quiet_now(self) -> bool:
+        if not self.time_known():
+            # Uhr unbekannt: nicht stumm schalten – "Verbindung weg" muss gesagt
+            # werden (Regel 8). Der Gong wiederholt sich dann aber nicht (signal_news).
+            return False
         start, end = self.cfg.quiet_hours
         h = self.now().hour
         return (h >= start or h < end) if start > end else (start <= h < end)
@@ -225,16 +279,37 @@ class Phone:
                 log.exception("Fehler bei Ereignis %r", ev)
 
     async def startup(self) -> None:
+        self.audio.fixed = set(fixed_phrases(self.cfg))
         self.audio.route("speaker")
         self.audio.set_volume(self.cfg.volume)
         await self.collect_stored(announce=False)
         await self.audio.say(P["ready"])
         if self.unread_count():
-            self.next_news_signal = self.now()          # beim nächsten Takt ankündigen
+            self.next_news_signal = self.mono()         # beim nächsten Takt ankündigen
+        self.render_task = self.bg(self.render_missing())
+
+    async def render_missing(self) -> int:
+        """Fehlende feste Ansagen im Leerlauf nachrendern (niedrige Priorität),
+        damit auch neue Kontakte oder geänderte Texte sofort kommen. Rückgabe: Anzahl."""
+        done = 0
+        phrases = fixed_phrases(self.cfg)
+        self.audio.fixed = set(phrases)          # Telefonbuch kommt erst nach dem Start dazu
+        for text in phrases:
+            if self.audio.cached(text) is not None:
+                continue
+            while not self.idle():                  # nie neben einem Gespräch o. Ä.
+                await asyncio.sleep(5 * self.pause_s)
+            if await self.audio.synth(text, keep=True, background=True) is None:
+                break                                # keine Sprachausgabe installiert
+            done += 1
+            await asyncio.sleep(0.2 * self.pause_s)
+        if done:
+            log.info("%d feste Ansagen nachgerendert", done)
+        return done
 
     async def handle(self, ev) -> None:
         if isinstance(ev, KeyEvent):
-            self.last_activity = self.now()
+            self.last_activity = self.mono()
             await self.on_key(ev)
         elif isinstance(ev, ModemEvent):
             await self.on_modem(ev)
@@ -501,15 +576,14 @@ class Phone:
                 wait = self.cfg.emergency_ring_seconds if number not in ("110", "112") else 180
                 if await self.wait_answer(call, wait):
                     await call.ended.wait()
-                    self.callback_until = self.now() + dt.timedelta(
-                        minutes=self.cfg.emergency_callback_minutes)
+                    self.callback_until = self.mono() + 60 * self.cfg.emergency_callback_minutes
                     self.go_idle()
                     await self.audio.say(P["sos_done"])
                     return
                 await self.end_call(None)
                 self.state = S.SOS
                 await asyncio.sleep(2)
-        self.callback_until = self.now() + dt.timedelta(minutes=self.cfg.emergency_callback_minutes)
+        self.callback_until = self.mono() + 60 * self.cfg.emergency_callback_minutes
         self.go_idle()
         await self.audio.say(P["sos_nobody"])
 
@@ -539,7 +613,7 @@ class Phone:
         self.audio.set_volume(5)
 
     def callback_active(self) -> bool:
-        return bool(self.callback_until and self.now() < self.callback_until)
+        return bool(self.callback_until and self.mono() < self.callback_until)
 
     # ================================================================ Anrufe
     def offline_phrase(self) -> str:
@@ -661,7 +735,7 @@ class Phone:
     async def on_modem(self, ev: ModemEvent) -> None:
         k = ev.kind
         if k == "ring":
-            self.last_ring = self.now()
+            self.last_ring = self.mono()
             if self.call is not None and self.call.ended.is_set():
                 self.call = None                  # Rest eines beendeten Gesprächs
             if self.call is None:
@@ -695,8 +769,7 @@ class Phone:
             # Nachts nicht wecken: dann sagt es erst ein Tastendruck oder die
             # Erinnerung nach der Ruhezeit (link_reminder ist dann schon fällig).
             quiet = self.quiet_now()
-            self.link_reminder = self.now() + (dt.timedelta(0) if quiet else
-                                               dt.timedelta(minutes=self.cfg.link_reminder_minutes))
+            self.link_reminder = self.mono() + (0 if quiet else 60 * self.cfg.link_reminder_minutes)
             if self.state not in (S.IN_CALL, S.SOS) and not quiet:
                 self.speak(P.get(ev.data, self.offline_phrase()))
         elif k == "link_ok":
@@ -748,45 +821,72 @@ class Phone:
         return n
 
     async def on_sms(self, index: int, announce: bool = True) -> None:
+        """Nachricht holen. Vom Speicher (SIM) gelöscht wird erst, wenn sie sicher
+        im Posteingang steht – und bei langen SMS erst, wenn alle Teile da sind
+        (nach einem Neustart setzt collect_stored sie wieder zusammen)."""
         d = await self.modem.read_sms(index)
-        await self.modem.delete_sms(index)
-        if d is None:
+        if d is None:                                 # unlesbar (z. B. Statusbericht): weg damit
+            await self._delete_stored([index])
             return
+        indices = [index]
         text = d.text
         if d.concat_ref is not None and d.concat_total > 1:
             key = (normalize(d.sender), d.concat_ref)
-            entry = self.partial.setdefault(key, {"t": self.now(), "parts": {}, "d": d})
+            entry = self.partial.setdefault(key, {"t": self.mono(), "parts": {}, "d": d, "idx": []})
             entry["parts"][d.concat_seq] = d.text
+            if index not in entry["idx"]:
+                entry["idx"].append(index)
             if len(entry["parts"]) < d.concat_total:
                 return                                  # auf weitere Teile warten
             del self.partial[key]
             text = "".join(entry["parts"][i] for i in sorted(entry["parts"]))
+            indices = entry["idx"]
         audio = getattr(d, "audio", None)            # Anrufbeantworter: Pfad oder ""
         if audio is not None:
             text = P["voicemail"] if audio else P["voicemail_unplayable"]
-        await self.store_sms(d.sender, text, d.timestamp, announce, audio=audio or "")
+        if await self.store_sms(d.sender, text, d.timestamp, announce, audio=audio or ""):
+            await self._delete_stored(indices)
+
+    async def _delete_stored(self, indices) -> None:
+        for i in indices:
+            try:
+                await self.modem.delete_sms(i)
+            except ModemError as e:                   # bleibt liegen; doppelt wird erkannt
+                log.warning("SMS %s nicht gelöscht: %s", i, e)
 
     async def store_sms(self, sender: str, text: str, ts, announce: bool = True,
-                        audio: str = "") -> None:
+                        audio: str = "") -> bool:
+        """In den Posteingang. Rückgabe: dauerhaft gespeichert (erst dann darf
+        die Nachricht aus dem Speicher des Modems/der Fritz!Box gelöscht werden)."""
         c = self.cfg.by_number(sender)
         if not audio and c and c.admin and text.strip().upper() == "STATUS":
-            return await self.send_status(sender)
+            await self.send_status(sender)
+            return True
         msg = {"sender": sender, "text": text.strip(),
                "time": (ts or self.now()).isoformat(timespec="minutes"), "read": False}
         if audio:
             msg["audio"] = audio
+        if any(m["sender"] == msg["sender"] and m["time"] == msg["time"] and m["text"] == msg["text"]
+               for m in self.inbox[:10]):
+            return True                                 # schon da (Löschen hatte nicht geklappt)
         self.inbox.insert(0, msg)
         for old in self.inbox[50:]:                     # alte Aufnahmen mit löschen
             if old.get("audio"):
                 Path(old["audio"]).unlink(missing_ok=True)
         del self.inbox[50:]
-        self._save("inbox.json", self.inbox)
+        try:
+            self._save("inbox.json", self.inbox)
+            saved = True
+        except OSError as e:                            # Speicher voll/schreibgeschützt
+            log.error("Posteingang nicht gespeichert: %s – Nachricht bleibt im Modem", e)
+            saved = False
         if not announce:
-            return
+            return saved
         # Nie automatisch vorlesen: nur Signal + LED. Vorgelesen wird erst auf
         # Tastendruck (Nachricht-Taste). Im Gespräch/Menü kommt der Gong danach.
-        self.next_news_signal = self.now()
+        self.next_news_signal = self.mono()
         await self.signal_news()
+        return saved
 
     def unread_count(self) -> int:
         return sum(not m["read"] for m in self.inbox)
@@ -796,14 +896,16 @@ class Phone:
         if not self.unread_count():
             self.next_news_signal = None
             return
-        now = self.now()
+        now = self.mono()
         if (self.next_news_signal is None or now < self.next_news_signal
                 or self.state != S.IDLE or (self.job and not self.job.done())
                 or self.quiet_now()):
             return
         self.bg(self.audio.tone("gong"))
         minutes = self.cfg.news_signal_minutes
-        self.next_news_signal = now + dt.timedelta(minutes=minutes) if minutes > 0 else None
+        if not self.time_known():
+            minutes = 0                 # Uhr unbekannt: nicht nachts wiederholen; LED blinkt weiter
+        self.next_news_signal = now + 60 * minutes if minutes > 0 else None
 
     def update_news_led(self) -> None:
         """Langsames Blinken (1 s an, 2 s aus), solange Ungelesenes da ist."""
@@ -940,7 +1042,8 @@ class Phone:
     # ================================================================ Info
     async def info_job(self) -> None:
         now = self.now()
-        parts = [spoken_time(now), spoken_date(now)]
+        # Nie eine geratene Uhrzeit ansagen (Pi ohne gepufferte Uhr, siehe clock.py)
+        parts = [spoken_time(now), spoken_date(now)] if self.time_known() else [P["time_unknown"]]
         b = self.hw.battery_percent()
         if b is not None:
             parts.append(f"Akku {b} Prozent{', lädt' if self.hw.on_charger() else ''}.")
@@ -1003,8 +1106,8 @@ class Phone:
     async def on_tick(self) -> None:
         self.ticks += 1
         self._try_restart()
-        now = self.now()
-        idle_s = (now - self.last_activity).total_seconds()
+        now = self.mono()
+        idle_s = now - self.last_activity
         if self.state == S.ENTRY and idle_s > self.cfg.entry_timeout_s:
             self.go_idle()
             self.speak(P["entry_cleared"])
@@ -1012,7 +1115,7 @@ class Phone:
             if self.state == S.CONFIRM:
                 self.speak(P["not_sent"])
             self.go_idle()
-        elif self.state == S.RINGING and (now - self.last_ring).total_seconds() > 8:
+        elif self.state == S.RINGING and now - self.last_ring > 8:
             # Kein Klingeln mehr, aber auch kein Ende gemeldet: Backend freigeben,
             # sonst gälte jeder spätere Anruf dort als Zweitanruf
             try:
@@ -1025,10 +1128,11 @@ class Phone:
             self.audio.set_volume(self.volume_before_sos)
             self.volume_before_sos = None
         for key, entry in list(self.partial.items()):     # unvollständige lange SMS
-            if (now - entry["t"]).total_seconds() > 120:
+            if now - entry["t"] > 120:
                 del self.partial[key]
                 text = " … ".join(entry["parts"][i] for i in sorted(entry["parts"]))
-                await self.store_sms(entry["d"].sender, text, entry["d"].timestamp)
+                if await self.store_sms(entry["d"].sender, text, entry["d"].timestamp):
+                    await self._delete_stored(entry.get("idx", []))
         await self.signal_news()
         self.update_news_led()
         if self.link_reminder and now >= self.link_reminder:
@@ -1036,10 +1140,12 @@ class Phone:
                 self.link_reminder = None
             elif self.state == S.IDLE and not self.quiet_now() and not (self.job and not self.job.done()):
                 self.speak(self.offline_phrase())
-                self.link_reminder = now + dt.timedelta(minutes=self.cfg.link_reminder_minutes)
+                self.link_reminder = now + 60 * self.cfg.link_reminder_minutes
         if self.ticks % 60 == 0:
             await self.check_battery()
             await self.check_modem()
+        if self.ticks % 3600 == 0 and (self.render_task is None or self.render_task.done()):
+            self.render_task = self.bg(self.render_missing())   # z. B. neue Telefonbuch-Namen
         if self.ticks % 600 == 0:
             if idle_s > 600:
                 self.stt.unload()
@@ -1063,7 +1169,7 @@ class Phone:
         probieren – nicht alle drei Minuten dieselbe Ansage."""
         if not getattr(self.modem, "has_modem", False) or self.state not in (S.IDLE, S.READING):
             return
-        now = self.now()
+        now = self.mono()
         if self.modem_retry_at and now < self.modem_retry_at:
             return
         if await self.modem.alive():
@@ -1083,7 +1189,7 @@ class Phone:
         if await self.modem.alive():
             self._modem_back()
             return
-        self.modem_retry_at = now + dt.timedelta(minutes=30)
+        self.modem_retry_at = now + 30 * 60
         if not self.modem_dead_announced:
             self.modem_dead_announced = True
             self.speak(P["modem_dead"])

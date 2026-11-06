@@ -372,6 +372,11 @@ class HybridBackend(TelephonyBackend):
         if name:
             await self.leg(name).delete_sms(idx)
 
+    async def network_time(self):
+        if self.mobile_started and self.radio_on:
+            return await self.mobile.network_time()
+        return None
+
     async def gps_position(self, timeout: float = 30):
         home = getattr(self.cfg, "home_position", None)
         if self.home.online and home:            # zu Hause: Adresse statt GPS (drinnen schlecht)

@@ -43,6 +43,7 @@ CONFIRM_AFTER_S = 120
 BASIS = "@basis"            # Erstinstallation unter /opt: Rückfall = Symlink entfernen
 MANIFEST_FIELDS = ("version", "url", "sha256", "notes")
 MAX_PACKAGE = 50 * 1024 * 1024   # Pakete enthalten nur Python-Code: alles darüber ist kaputt
+MIN_FREE = 20 * 1024 * 1024      # so viel muss auf /data frei bleiben (Posteingang, Einstellungen)
 VERSION_RE = re.compile(r"^[0-9][0-9A-Za-z.+_-]{0,39}$")
 
 
@@ -183,6 +184,9 @@ class Updater:
             self.state.phase = "downloading"
             self.save()
             self.releases.mkdir(parents=True, exist_ok=True)
+            free = shutil.disk_usage(self.data).free
+            if free < 2 * MIN_FREE:
+                raise UpdateError(f"Zu wenig freier Speicher ({free // 2**20} MB) – Update abgebrochen")
             with tempfile.TemporaryDirectory(dir=self.data) as tmp:
                 pkg = Path(tmp) / "paket.tar.gz"
                 h = hashlib.sha256()
@@ -192,6 +196,8 @@ class Updater:
                         size += len(chunk)
                         if size > MAX_PACKAGE:
                             raise UpdateError("Paket ist zu groß")
+                        if size % (4 * 2**20) < len(chunk) and shutil.disk_usage(self.data).free < MIN_FREE:
+                            raise UpdateError("Speicher wird knapp – Update abgebrochen")
                         h.update(chunk)
                         f.write(chunk)
                 self.state.phase = "verifying"

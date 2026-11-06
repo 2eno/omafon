@@ -20,6 +20,7 @@ Anrufer frei setzen ("Polizei", "Ihre Bank").
 from __future__ import annotations
 
 import asyncio
+import collections
 import itertools
 import json
 import logging
@@ -189,7 +190,7 @@ class BaresipBackend(TelephonyBackend):
         self._next_idx = 0
         self._seen: set[tuple] = set()
         self._tam_lock = asyncio.Lock()   # nie zwei Abfragen gleichzeitig (sonst doppelt)
-        self.log: list[str] = []      # gesendete Befehle (für Tests/Simulator)
+        self.log: collections.deque[str] = collections.deque(maxlen=200)   # letzte Befehle (Tests/Diagnose)
 
     # ------------------------------------------------------------ Eigenschaften
     @property

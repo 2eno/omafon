@@ -99,8 +99,8 @@ hangup_hold_s: 0.5            # im Gespräch Auflegetaste so lange halten (Wange
 sos_hold_s: 3.0
 sos_cancel_window_s: 5
 
-audio_device: "plughw:CARD=Device,DEV=0"
-mic_device: "plughw:CARD=Device,DEV=0"
+audio_device: omafon         # geteiltes Gerät aus systemd/omafon-asound.conf (/etc/asound.conf)
+mic_device: omafon           # ohne die Datei: Rückfall auf plughw:CARD=Device,DEV=0
 cache_dir: /var/cache/omafon
 piper_bin: /opt/omafon/piper/piper
 piper_model: /opt/omafon/voices/de_DE-thorsten-medium.onnx

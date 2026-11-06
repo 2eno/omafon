@@ -13,7 +13,7 @@ from omafon.audio import SimAudio
 from omafon.hardware import KeyEvent, KeyTracker, SimHardware
 from omafon.modem import SimModem
 from omafon.numbers import normalize, spoken_number
-from omafon.phone import P, S, Phone
+from omafon.phone import Call, P, S, Phone
 from omafon.stt import SimRecognizer
 
 # Kernlogik mit dem SIM7600-Simulator (Mobilfunkteil des Hybridgeräts)
@@ -497,7 +497,7 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
         self.phone.state = S.SOS
         self.phone.loud_for_emergency()
         self.assertEqual(self.audio.volume, 5)
-        self.phone.callback_until = self.clock + dt.timedelta(minutes=30)
+        self.phone.callback_until = self.phone.mono() + 30 * 60
         self.phone.go_idle()
         self.q.put_nowait("tick")
         await self.pump()
@@ -542,6 +542,127 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.phone.inbox[0]["text"], "Wichtig")
         self.assertEqual(self.modem.store, {})
 
+    async def test_missing_fixed_phrases_rendered_when_idle(self):
+        from omafon.phone import fixed_phrases
+        rendered = []
+        have = set(fixed_phrases(self.cfg)) - {"Anruf von Peter.", "Ich rufe Peter an."}
+        self.audio.cached = lambda text: Path("x.wav") if text in have else None
+
+        async def synth(text, keep=None, background=False):
+            rendered.append((text, keep, background))
+            have.add(text)
+            return Path("x.wav")
+        self.audio.synth = synth
+        self.phone.pause_s = 0.001
+        self.modem.inject_call("+491609876543")                  # erst nach dem Gespräch
+        await self.pump()
+        task = asyncio.create_task(self.phone.render_missing())
+        await asyncio.sleep(0.05)
+        self.assertEqual(rendered, [])
+        await self.press("HANGUP")                                 # abweisen -> Ruhe
+        self.assertEqual(await asyncio.wait_for(task, 2), 2)
+        self.assertEqual({t for t, _, _ in rendered}, {"Anruf von Peter.", "Ich rufe Peter an."})
+        self.assertTrue(all(k is True and b is True for _, k, b in rendered))
+
+    def test_phrases_match_what_phone_says(self):
+        """fixed_phrases muss die Formulierungen aus phone.py treffen (sonst nie im Cache)."""
+        from omafon.phone import fixed_phrases
+        fp = set(fixed_phrases(self.cfg))
+        for text in ("Anruf von Peter.", "Ich rufe Peter an.", "Peter. Gelbe Taste zum Anrufen.",
+                     "Verpasster Anruf von Peter.", "Lautstärke 3.", "Auf Taste zwo ist niemand gespeichert.",
+                     P["ready"], "zwo", "Raute"):
+            self.assertIn(text, fp)
+        self.phone.call = Call("+491711234567", True)
+        self.assertIn(self.phone.caller_phrase(), fp)             # Klingelansage kommt aus dem Cache
+
+    async def test_long_sms_survives_restart_before_last_part(self):
+        self.modem.inject_sms("+491711234567", "Ein langer Text. " * 25)   # 3 Teile
+        evs = []
+        while not self.q.empty():
+            evs.append(self.q.get_nowait())
+        self.assertEqual(len(evs), 3)
+        for ev in evs[:2]:                                      # nur zwei Teile verarbeitet …
+            await self.phone.handle(ev)
+        self.assertEqual(len(self.modem.store), 3)              # … nichts gelöscht
+        phone2 = Phone(self.cfg, self.audio, self.modem, self.stt, self.hw, self.q,   # Neustart
+                       clock=lambda: self.clock)
+        await phone2.startup()
+        self.assertEqual(len(phone2.inbox), 1)
+        self.assertEqual(phone2.inbox[0]["text"], ("Ein langer Text. " * 25).strip())
+        self.assertEqual(self.modem.store, {})
+
+    async def test_sms_stays_in_modem_when_inbox_cannot_be_saved(self):
+        def full(name, obj):
+            raise OSError(28, "No space left on device")
+        real_save = self.phone._save
+        self.phone._save = full
+        self.modem.inject_sms("+491711234567", "Wichtig")
+        with self.assertLogs("omafon.phone", "ERROR"):
+            await self.pump()
+        self.assertEqual(self.phone.inbox[0]["text"], "Wichtig")   # angekündigt …
+        self.assertEqual(len(self.modem.store), 1)                  # … aber nicht gelöscht
+        self.phone._save = real_save
+        await self.phone.collect_stored()
+        self.assertEqual(len(self.phone.inbox), 1)                  # nicht doppelt
+        self.assertEqual(self.modem.store, {})
+
+    async def test_damaged_inbox_file_is_cleaned(self):
+        import json
+        (Path(self.tmp.name) / "inbox.json").write_text(json.dumps(
+            [{"sender": "+4930", "text": "alt, ohne read"}, "Unsinn", {"text": 5},
+             {"sender": None, "text": "ohne Absender", "read": False, "time": None}]), encoding="utf-8")
+        (Path(self.tmp.name) / "missed.json").write_text('{"kein": "Liste"}', encoding="utf-8")
+        phone = Phone(self.cfg, self.audio, self.modem, self.stt, self.hw, self.q,
+                      clock=lambda: self.clock)
+        self.assertEqual(len(phone.inbox), 2)
+        self.assertEqual(phone.unread_count(), 1)
+        self.assertEqual(phone.missed, [])
+        await phone.on_tick()                                       # kein Fehler im Takt
+        phone.playlist = phone.build_playlist()
+        await phone.read_job(start=True)
+        self.assertIn("ohne Absender", self.said())
+
+    async def test_unknown_time_is_never_announced(self):
+        self.phone.time_known = lambda: False
+        await self.press("INFO")
+        await self.pump_until(lambda: any("Akku" in t for t in self.audio.spoken))
+        self.assertIn(P["time_unknown"], self.said())
+        self.assertNotIn("Uhr", self.said().replace(P["time_unknown"], ""))
+        self.assertNotIn("Heute ist", self.said())
+
+    async def test_unknown_time_link_lost_still_said_gong_not_repeated(self):
+        self.phone.time_known = lambda: False
+        self.clock = dt.datetime(2026, 11, 1, 23, 30)            # "nachts" laut falscher Uhr
+        self.modem.inject("link_lost", "no_network")
+        await self.pump()
+        self.assertIn(P["no_network"], self.said())               # Regel 8: nie stumm
+        self.modem.inject_sms("+491711234567", "Hallo")
+        await self.pump()
+        self.assertEqual(self.audio.spoken.count("<gong>"), 1)
+        self.clock += dt.timedelta(minutes=30)
+        for _ in range(3):
+            self.q.put_nowait("tick")
+        await self.pump()
+        self.assertEqual(self.audio.spoken.count("<gong>"), 1)    # nicht alle 10 min (könnte Nacht sein)
+
+    async def test_time_jump_does_not_end_ringing_call(self):
+        mono = [5000.0]
+        phone = Phone(self.cfg, self.audio, self.modem, self.stt, self.hw, self.q,
+                      clock=lambda: self.clock, monotonic=lambda: mono[0])
+        self.phone = phone
+        self.modem.inject("ring")
+        await self.pump()
+        self.assertEqual(phone.state, S.RINGING)
+        self.clock += dt.timedelta(days=3)                       # NTP stellt die Uhr nach dem Start
+        mono[0] += 1
+        self.q.put_nowait("tick")
+        await self.pump()
+        self.assertEqual(phone.state, S.RINGING)                 # früher: sofort "verpasst"
+        mono[0] += 9                                             # wirklich 9 s kein Klingeln mehr
+        self.q.put_nowait("tick")
+        await self.pump()
+        self.assertEqual(phone.state, S.IDLE)
+
     def test_texts_are_in_p_dict(self):
         """Regel 3: feste Ansagen nur in P (sonst fehlen sie im WAV-Cache)."""
         import re
@@ -549,6 +670,35 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
         body = src.split("class Phone", 1)[1]
         fixed = re.findall(r'(?:say|speak)\("([^"{]+)"\)', body)
         self.assertEqual(fixed, [], f"Feste Texte außerhalb von P: {fixed}")
+
+
+class ClockTests(unittest.TestCase):
+    def test_wall_clock_only_when_trustworthy(self):
+        from omafon.clock import Clock
+        synced, mono = [False], [100.0]
+        wall = dt.datetime(2026, 1, 1, 8, 0)                     # fake-hwclock: alter Stand
+        c = Clock(synchronized=lambda: synced[0], wall=lambda: wall, monotonic=lambda: mono[0], cache_s=0)
+        self.assertFalse(c.known())
+        c.set_network_time(dt.datetime(2026, 11, 6, 12, 0))      # NITZ vom Mobilfunk
+        mono[0] += 90
+        self.assertTrue(c.known())
+        self.assertEqual(c.now(), dt.datetime(2026, 11, 6, 12, 1, 30))
+        synced[0] = True                                         # NTP hat übernommen
+        self.assertEqual(c.now(), wall)
+
+    def test_kernel_check_does_not_crash(self):
+        from omafon.clock import kernel_clock_synchronized
+        self.assertIn(kernel_clock_synchronized(), (True, False))
+
+    def test_cclk_parsing(self):
+        from omafon.modem import parse_cclk
+        utc = dt.datetime(2026, 11, 6, 11, 34, 56, tzinfo=dt.timezone.utc)
+        self.assertEqual(parse_cclk('+CCLK: "26/11/06,12:34:56+04"'),       # +1 h (MEZ)
+                         utc.astimezone().replace(tzinfo=None))
+        self.assertIsNone(parse_cclk('+CCLK: "80/01/06,00:01:00+00"'))      # Modem-Uhr ohne Netz
+        self.assertIsNone(parse_cclk('+CCLK: "00/01/01,00:00:10+00"'))
+        self.assertIsNone(parse_cclk('+CCLK: "26/13/06,12:34:56"'))
+        self.assertIsNone(parse_cclk("ERROR"))
 
 
 class ConfigTests(unittest.TestCase):
@@ -674,6 +824,151 @@ class AudioTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(names[0], "eins")
             self.assertEqual(names[-1], "Abgebrochen.")
             self.assertNotIn("drei", names)
+
+    def fake_exec(self, created, behaviour=None):
+        """Ersetzt asyncio.create_subprocess_exec; behaviour(cmd) -> Sekunden Laufzeit."""
+        class Proc:
+            def __init__(self, cmd):
+                self.cmd, self.returncode, self.terminated = cmd, None, False
+                self._done = asyncio.Event()
+                self.seconds = (behaviour or (lambda c: 0.01))(cmd)
+                if "--output_file" in cmd and self.seconds < 1:     # "Piper" schreibt die Datei
+                    Path(cmd[cmd.index("--output_file") + 1]).write_bytes(b"RIFF")
+                asyncio.get_running_loop().call_later(self.seconds, self._finish, 0)
+
+            def _finish(self, code):
+                if self.returncode is None:
+                    self.returncode = code
+                    self._done.set()
+
+            async def wait(self):
+                await self._done.wait()
+                return self.returncode
+
+            async def communicate(self, data=None):
+                await self.wait()
+                return b"", b""
+
+            def terminate(self):
+                if self.returncode is not None:
+                    raise ProcessLookupError()
+                self.terminated = True
+                self._finish(-15)
+
+            def kill(self):
+                self.terminate()
+
+        async def exec_(*cmd, **kw):
+            p = Proc(list(cmd))
+            created.append(p)
+            return p
+        return exec_
+
+    async def test_cancelled_playback_falls_silent(self):
+        """Klingeln abgebrochen (angenommen) -> Klingelton verstummt sofort."""
+        from omafon.audio import Audio
+        with tempfile.TemporaryDirectory() as d:
+            cfg = config.load(CFG)
+            cfg.cache_dir = d
+            audio = Audio(cfg)
+            created = []
+            orig = asyncio.create_subprocess_exec
+            asyncio.create_subprocess_exec = self.fake_exec(created, lambda c: 5.0)
+            try:
+                t = asyncio.create_task(audio.tone("ring", interrupt=True))
+                await asyncio.sleep(0.05)
+                t.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await t
+            finally:
+                asyncio.create_subprocess_exec = orig
+            self.assertTrue(created[-1].terminated)
+
+    async def test_stop_race_is_harmless(self):
+        from omafon.audio import Audio
+        with tempfile.TemporaryDirectory() as d:
+            cfg = config.load(CFG)
+            cfg.cache_dir = d
+            audio = Audio(cfg)
+
+            class Gone:
+                returncode = None
+                def terminate(self): raise ProcessLookupError()
+                def kill(self): raise ProcessLookupError()
+                async def wait(self): return 0
+            audio._proc = Gone()
+            await audio.stop()                                   # früher: Ausnahme -> "Fehler"-Ansage
+
+    async def test_dynamic_cache_rotates_fixed_stays(self):
+        from omafon.audio import Audio
+        with tempfile.TemporaryDirectory() as d:
+            cfg = config.load(CFG)
+            cfg.cache_dir = d
+            cfg.piper_bin = sys.executable                       # "Piper vorhanden"
+            cfg.piper_model = str(CFG)
+            audio = Audio(cfg)
+            audio.DYN_KEEP = 5
+            audio.fixed = {"Telefon ist bereit."}
+            created = []
+            orig = asyncio.create_subprocess_exec
+            asyncio.create_subprocess_exec = self.fake_exec(created)
+            try:
+                fixed = await audio.synth("Telefon ist bereit.")
+                for i in range(12):
+                    await audio.synth(f"Nachricht Nummer {i}")
+            finally:
+                asyncio.create_subprocess_exec = orig
+            self.assertEqual(fixed.parent, Path(d))              # fest: bleibt
+            self.assertTrue(fixed.exists())
+            self.assertEqual(len(list((Path(d) / "frei").glob("*.wav"))), 5)
+            self.assertIsNotNone(audio.cached("Nachricht Nummer 11"))
+            self.assertIsNone(audio.cached("Nachricht Nummer 0"))
+
+    async def test_hanging_synthesis_is_aborted(self):
+        from omafon.audio import Audio
+        with tempfile.TemporaryDirectory() as d:
+            cfg = config.load(CFG)
+            cfg.cache_dir = d
+            cfg.piper_bin = sys.executable
+            cfg.piper_model = str(CFG)
+            audio = Audio(cfg)
+            audio.SYNTH_TIMEOUT_S = 0.1
+            created = []
+            orig = asyncio.create_subprocess_exec
+            asyncio.create_subprocess_exec = self.fake_exec(created, lambda c: 30.0)
+            try:
+                with self.assertLogs("omafon.audio", "ERROR"):
+                    self.assertIsNone(await audio.synth("Hallo"))
+            finally:
+                asyncio.create_subprocess_exec = orig
+            self.assertTrue(created[-1].terminated)
+            self.assertEqual(list(Path(d).glob("*.tmp.wav")), [])
+
+    async def test_shared_alsa_device_checked_with_fallback(self):
+        from omafon.audio import Audio
+        with tempfile.TemporaryDirectory() as d:
+            cfg = config.load(CFG)
+            cfg.cache_dir = d
+            self.assertEqual(cfg.audio_device, "omafon")
+            audio = Audio(cfg)
+            listing = {"aplay": b"null\n    Discard all samples\nomafon\n    Omafon (geteilt)\n",
+                       "arecord": b"null\n    Discard all samples\n"}          # Mikrofon fehlt
+
+            class P:
+                def __init__(self, tool): self.tool = tool
+                async def communicate(self): return listing[self.tool], b""
+
+            async def exec_(tool, *a, **k):
+                return P(tool)
+            orig = asyncio.create_subprocess_exec
+            asyncio.create_subprocess_exec = exec_
+            try:
+                with self.assertLogs("omafon.audio", "ERROR"):
+                    await audio.check_devices()
+            finally:
+                asyncio.create_subprocess_exec = orig
+            self.assertEqual(cfg.audio_device, "omafon")                 # vorhanden: bleibt
+            self.assertEqual(cfg.mic_device, Audio.FALLBACK_DEVICE)      # fehlt: Rückfall
 
     async def test_missing_player_does_not_crash(self):
         from omafon.audio import Audio

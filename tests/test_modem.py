@@ -55,8 +55,15 @@ class FakeSerial:
             self.push("\r\n> ")
             return
         reply = self.script.get(cmd, self.script.get(cmd.split("=")[0] + "=*", ["OK"]))
+        delay = 0.0
+        if isinstance(reply, tuple):                   # ("später", Sekunden, Zeilen)
+            _, delay, reply = reply
         if reply is not None:
-            self.push("".join(f"\r\n{line}\r\n" for line in reply))
+            text = "".join(f"\r\n{line}\r\n" for line in reply)
+            if delay:
+                threading.Timer(delay, self.push, args=(text,)).start()
+            else:
+                self.push(text)
 
     def close(self):
         self.closed = True
@@ -138,6 +145,14 @@ class ModemTests(unittest.IsolatedAsyncioTestCase):
         self.ser.script["AT+CGPSINFO"] = ["+CGPSINFO: ,,,,,,,,", "OK"]
         self.assertIsNone(await self.m.gps_position(timeout=0.5))
 
+    async def test_network_time(self):
+        self.assertIn("AT+CTZU=1", self.ser.cmds)
+        self.ser.script["AT+CCLK?"] = ['+CCLK: "26/11/06,12:34:56+04"', "OK"]
+        t = await self.m.network_time()
+        self.assertEqual((t.year, t.month, t.day), (2026, 11, 6))
+        self.ser.script["AT+CCLK?"] = ['+CCLK: "80/01/06,00:00:05+00"', "OK"]   # noch keine Netzzeit
+        self.assertIsNone(await self.m.network_time())
+
     async def test_hangup_falls_back_to_ath(self):
         await self.m.hangup()
         self.assertEqual(self.ser.cmds[-2:], ["AT+CHUP", "ATH"])
@@ -146,6 +161,24 @@ class ModemTests(unittest.IsolatedAsyncioTestCase):
         self.ser.script["AT+CSQ"] = None                   # Modem schweigt
         with self.assertRaises(ModemError):
             await self.m.cmd("AT+CSQ", timeout=0.3)
+
+    async def test_late_answer_does_not_shift_following_commands(self):
+        self.ser.script["AT+CSQ"] = ("später", 0.4, ["+CSQ: 18,99", "OK"])
+        self.ser.script["AT+CMGR=3"] = ("später", 0.3, ["+CMGR: 0,,25", HELLO, "OK"])
+        with self.assertRaises(ModemError):
+            await self.m.cmd("AT+CSQ", timeout=0.2)        # Zeitüberschreitung …
+        d = await self.m.read_sms(3)                       # … das späte "+CSQ/OK" darf hier nicht
+        self.assertEqual(d.text, "Hallo Oma")              # als SMS gelten (sonst gelöscht!)
+
+    async def test_cancelled_command_does_not_shift_following_commands(self):
+        self.ser.script["ATD0301234;"] = ("später", 0.3, ["OK"])
+        self.ser.script["AT+CSQ"] = ("später", 0.4, ["+CSQ: 18,99", "OK"])
+        t = asyncio.create_task(self.m.dial("0301234"))
+        await asyncio.sleep(0.05)
+        t.cancel()                                          # aufgelegt, während gewählt wird
+        with self.assertRaises(asyncio.CancelledError):
+            await t
+        self.assertEqual(await self.m.signal(), 18)
 
     async def test_restart_does_not_leave_second_reader(self):
         await self.m.start()                                # Neustart durch Phone

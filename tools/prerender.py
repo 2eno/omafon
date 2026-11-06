@@ -1,9 +1,12 @@
 """Erzeugt alle festen Ansagen vorab als WAV, damit sie ohne Verzögerung starten.
 
-    sudo python3 -m tools.prerender /etc/omafon/config.yaml
+    sudo -u omafon python3 -m tools.prerender /etc/omafon/config.yaml
 
-Nach jeder Änderung an Kontakten, Ansagen (P-Dict) oder Stimme erneut ausführen.
-Festnetz: lädt zusätzlich die Namen aus dem Fritz!Box-Telefonbuch.
+Als Dienstbenutzer ausführen, damit die Dateien ihm gehören. Das Telefon rendert
+fehlende feste Ansagen auch selbst im Leerlauf nach (neue Kontakte per App,
+geänderte Texte) – vorab rendern spart nur die Wartezeit nach der Installation
+oder nach einem Stimmenwechsel. Festnetz: lädt zusätzlich die Namen aus dem
+Fritz!Box-Telefonbuch.
 """
 import asyncio
 import sys
@@ -11,8 +14,7 @@ import time
 
 from omafon import config
 from omafon.audio import Audio
-from omafon.numbers import DIGIT_WORDS
-from omafon.phone import P
+from omafon.phone import fixed_phrases
 
 
 def load_fritz_phonebook(cfg) -> None:
@@ -31,16 +33,8 @@ def load_fritz_phonebook(cfg) -> None:
 
 
 def phrases(cfg) -> list[str]:
-    out = list(DIGIT_WORDS.values()) + list(P.values())
-    out += ["drei", "zwo", "eins"] + [f"Lautstärke {i}." for i in range(1, 6)]
-    for d in DIGIT_WORDS.values():
-        out.append(f"Auf Taste {d} ist niemand gespeichert.")
-    for c in cfg.contacts:
-        out += [f"Anruf von {c.name}.", f"Ich rufe {c.name} an.",
-                f"{c.name}. Gelbe Taste zum Anrufen.", f"Verpasster Anruf von {c.name}."]
-    for name in sorted(set(cfg.phonebook.values())):
-        out += [f"Anruf von {name}.", f"Verpasster Anruf von {name}."]
-    return list(dict.fromkeys(out))
+    """Dieselbe Liste, die Phone im Betrieb dauerhaft im Cache hält."""
+    return fixed_phrases(cfg)
 
 
 async def main(path: str) -> None:
@@ -48,9 +42,10 @@ async def main(path: str) -> None:
     load_fritz_phonebook(cfg)
     audio = Audio(cfg)
     items = phrases(cfg)
+    audio.fixed = set(items)
     t0 = time.monotonic()
     for i, text in enumerate(items, 1):
-        ok = await audio.synth(text)
+        ok = await audio.synth(text, keep=True)
         print(f"[{i:3}/{len(items)}] {'ok ' if ok else 'FEHLER'} {text}")
     print(f"Fertig in {time.monotonic() - t0:.0f} s")
 

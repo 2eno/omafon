@@ -1,9 +1,13 @@
 """Sprachausgabe, Töne und Verstärkersteuerung.
 
 Grundsatz: Eine neue Ansage unterbricht die alte sofort. Feste Ansagen
-(Ziffern, Menüs, Kontaktnamen) werden einmalig mit tools/prerender.py
-erzeugt und liegen als WAV im Cache – dadurch startet die Ziffernansage
-ohne spürbare Verzögerung.
+(Ziffern, Menüs, Kontaktnamen – phone.fixed_phrases) liegen dauerhaft als WAV
+im Cache: vorab erzeugt mit tools/prerender.py oder beim ersten Gebrauch bzw.
+im Leerlauf nachgerendert. Alles andere (SMS-Texte, Nummern) kommt in einen
+kleinen rotierenden Cache – mit Overlay-Dateisystem liegt /var/cache im RAM.
+
+Wird ein Ablauf abgebrochen, verstummt auch sein Ton (Klingeln nach dem
+Annehmen, Vorlesen nach dem Auflegen).
 """
 from __future__ import annotations
 
@@ -51,22 +55,69 @@ class TPA2016:
         self.bus.write_byte_data(self.ADDR, 0x06, max(0, min(31, level)))
 
 
+def _end(proc) -> None:
+    """Kindprozess beenden, ohne zu warten; schon beendet ist kein Fehler."""
+    if proc is not None and proc.returncode is None:
+        try:
+            proc.terminate()
+        except ProcessLookupError:
+            pass
+
+
+def wav_seconds(path: Path) -> float | None:
+    try:
+        with wave.open(str(path), "rb") as w:
+            return w.getnframes() / float(w.getframerate() or 1)
+    except (OSError, EOFError, wave.Error):
+        return None
+
+
 class Audio:
     # Lautstärke 1..5 -> Verstärkung in dB (Lautsprecher / Hörkapsel)
     SPEAKER_DB = {1: 6, 2: 12, 3: 18, 4: 24, 5: 30}
     EARPIECE_DB = {1: -6, 2: 0, 3: 4, 4: 8, 5: 12}
+    DYN_KEEP = 40              # so viele frei formulierte Ansagen bleiben im Cache
+    SYNTH_TIMEOUT_S = 60       # Piper hängt -> abbrechen statt ewig warten
 
     def __init__(self, cfg, amp: TPA2016 | None = None):
         self.cfg = cfg
         self.amp = amp
         self.cache = Path(cfg.cache_dir)
         self.cache.mkdir(parents=True, exist_ok=True)
+        self.dyn = self.cache / "frei"          # rotierend, siehe DYN_KEEP
+        self.dyn.mkdir(exist_ok=True)
+        self.fixed: set[str] = set()            # setzt main.py: phone.fixed_phrases(cfg)
         self._proc: asyncio.subprocess.Process | None = None
         self._lock = asyncio.Lock()
         self.route_mode = "speaker"
         self.volume = cfg.volume
         self._gen = 0                         # zählt unterbrechende Ansagen (say)
         self._make_tones()
+
+    # ------------------------------------------------------------ Gerät
+    FALLBACK_DEVICE = "plughw:CARD=Device,DEV=0"
+
+    async def check_devices(self) -> None:
+        """Gibt es die konfigurierten ALSA-Geräte? Ein Name ohne ':' (z. B. "omafon"
+        aus /etc/asound.conf) muss in `aplay -L` stehen – sonst bliebe das Telefon
+        stumm. Dann Rückfall auf die Soundkarte direkt (mit Logeintrag)."""
+        for attr, tool in (("audio_device", "aplay"), ("mic_device", "arecord")):
+            name = getattr(self.cfg, attr)
+            if ":" in name or name == "default":
+                continue
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    tool, "-L", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+                out, _ = await asyncio.wait_for(proc.communicate(), 10)
+            except (OSError, asyncio.TimeoutError) as e:
+                log.warning("%s -L nicht möglich (%s) – Gerät %s ungeprüft", tool, e, name)
+                continue
+            names = {line.strip() for line in out.decode(errors="replace").splitlines()
+                     if line and not line[0].isspace()}
+            if name not in names:
+                log.error("ALSA-Gerät %r fehlt (systemd/omafon-asound.conf nach /etc/asound.conf "
+                          "kopieren) – nutze %s, Ansagen im Gespräch fallen aus", name, self.FALLBACK_DEVICE)
+                setattr(self.cfg, attr, self.FALLBACK_DEVICE)
 
     # ------------------------------------------------------------ Töne
     def _tone(self, name: str, parts: list[tuple[float, float]], vol: float = 0.6) -> Path:
@@ -128,23 +179,50 @@ class Audio:
             return "piper"
         return "espeak" if shutil.which("espeak-ng") else ""
 
-    def _cache_path(self, text: str, engine: str = "piper") -> Path:
+    def _cache_path(self, text: str, engine: str = "piper", fixed: bool = True) -> Path:
         # Notlösung espeak eigens schlüsseln: sonst bliebe die Roboterstimme im
         # Cache, auch wenn Piper später installiert ist.
         key = f"{self.cfg.piper_model}|{self.cfg.speech_rate}|{text}"
         if engine != "piper":
             key = f"{engine}|{key}"
-        return self.cache / (hashlib.sha1(key.encode()).hexdigest()[:16] + ".wav")
+        name = hashlib.sha1(key.encode()).hexdigest()[:16] + ".wav"
+        return (self.cache if fixed else self.dyn) / name
 
-    async def synth(self, text: str) -> Path | None:
-        path = self._cache_path(text)
-        if path.exists():
-            return path
+    def cached(self, text: str) -> Path | None:
+        """Schon gerendert (dauerhaft oder rotierend)? Ohne Synthese."""
+        engines = ["piper"]
         engine = self._engine()
-        if engine != "piper":
-            path = self._cache_path(text, engine)
-            if path.exists():
-                return path
+        if engine not in ("piper", ""):
+            engines.append(engine)
+        for eng in engines:
+            for fixed in (True, False):
+                p = self._cache_path(text, eng, fixed)
+                if p.exists():
+                    if not fixed:
+                        try:
+                            os.utime(p)              # zuletzt benutzt: bleibt länger
+                        except OSError:
+                            pass
+                    return p
+        return None
+
+    def _prune(self) -> None:
+        try:
+            files = sorted(self.dyn.glob("*.wav"), key=lambda f: f.stat().st_mtime, reverse=True)
+        except OSError:
+            return
+        for old in files[self.DYN_KEEP:]:
+            old.unlink(missing_ok=True)
+
+    async def synth(self, text: str, keep: bool | None = None, background: bool = False) -> Path | None:
+        """keep: dauerhaft speichern (Standard: nur feste Ansagen, self.fixed).
+        background: mit niedriger Priorität (Nachrendern im Leerlauf)."""
+        hit = self.cached(text)
+        if hit is not None:
+            return hit
+        engine = self._engine()
+        fixed = (text in self.fixed) if keep is None else keep
+        path = self._cache_path(text, engine or "piper", fixed)
         tmp = path.with_suffix(f".{os.getpid()}.{id(text)}.tmp.wav")   # parallele Synthesen getrennt
         if engine == "piper":
             cmd = [self.cfg.piper_bin, "--model", self.cfg.piper_model,
@@ -155,29 +233,47 @@ class Audio:
         else:
             log.error("Keine Sprachausgabe installiert")
             return None
+        if background and shutil.which("nice"):
+            cmd = ["nice", "-n", "15"] + cmd          # Tastenansagen haben Vorrang
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd, stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
-            await proc.communicate(text.encode("utf-8") if engine == "piper" else None)
         except OSError as e:
             log.error("Sprachsynthese startet nicht: %s", e)
             return None
+        try:
+            await asyncio.wait_for(proc.communicate(text.encode("utf-8") if engine == "piper" else None),
+                                   self.SYNTH_TIMEOUT_S)
+        except asyncio.TimeoutError:
+            log.error("Sprachsynthese hängt – abgebrochen: %r", text[:60])
+            _end(proc)
+            tmp.unlink(missing_ok=True)
+            return None
+        except asyncio.CancelledError:              # Ansage abgebrochen: Piper nicht weiterlaufen lassen
+            _end(proc)
+            tmp.unlink(missing_ok=True)
+            raise
         if proc.returncode == 0 and tmp.exists():
             os.replace(tmp, path)
+            if not fixed:
+                self._prune()
             return path
         tmp.unlink(missing_ok=True)
-        log.error("Sprachsynthese fehlgeschlagen: %r", text)
+        log.error("Sprachsynthese fehlgeschlagen: %r", text[:60])
         return None
 
     async def stop(self) -> None:
         p = self._proc
         if p and p.returncode is None:
-            p.terminate()
+            _end(p)                                 # schon beendet? egal (kein Fehler mehr)
             try:
                 await asyncio.wait_for(p.wait(), 1)
             except asyncio.TimeoutError:
-                p.kill()
+                try:
+                    p.kill()
+                except ProcessLookupError:
+                    pass
 
     async def play(self, path: Path | None, interrupt: bool = True, gen: int | None = None) -> None:
         """gen: Ansage-Generation aus say(). Wartet die Wiedergabe auf eine
@@ -190,13 +286,21 @@ class Audio:
             if gen is not None and gen != self._gen:
                 return
             try:
-                self._proc = await asyncio.create_subprocess_exec(
+                self._proc = proc = await asyncio.create_subprocess_exec(
                     "aplay", "-q", "-D", self.cfg.audio_device, str(path),
                     stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
             except OSError as e:                   # aplay fehlt: Telefon läuft weiter
                 log.error("Wiedergabe nicht möglich: %s", e)
                 return
-            await self._proc.wait()
+            seconds = wav_seconds(Path(path))
+            try:
+                await asyncio.wait_for(proc.wait(), (seconds or 600) + 10)
+            except asyncio.TimeoutError:           # Audiogerät hängt: nicht ewig blockieren
+                log.error("Wiedergabe hängt – abgebrochen: %s", Path(path).name)
+                _end(proc)
+            except asyncio.CancelledError:          # wer wartet, ist weg -> Ton aus
+                _end(proc)
+                raise
 
     async def say(self, text: str, interrupt: bool = True) -> None:
         """Spricht text. Kehrt zurück, wenn fertig oder unterbrochen.
@@ -242,6 +346,9 @@ class SimAudio(Audio):
 
     async def stop(self) -> None:
         pass
+
+    def cached(self, text: str):
+        return Path("sim.wav")                       # Simulation: alles schon "gerendert"
 
     async def play(self, path, interrupt: bool = True) -> None:
         self.spoken.append(f"<abspielen {Path(path).name}>")

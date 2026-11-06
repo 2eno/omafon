@@ -67,7 +67,7 @@ pip install -r requirements-dev.txt                       # PyYAML, cryptography
 python3 -m unittest discover -s tests -v                  # Tests
 python3 -m omafon.main --config config.festnetz.example.yaml --sim  # Festnetz-Simulator (Daten in ./sim-data)
 python3 -m omafon.main --config config.hybrid.example.yaml --sim    # Hybrid-Simulator
-python3 -m tools.prerender /etc/omafon/config.yaml        # Ansagen vorab rendern (Pi)
+sudo -u omafon python3 -m tools.prerender /etc/omafon/config.yaml  # Ansagen vorab rendern (Pi)
 python3 -m omafon.main --config config.festnetz.example.yaml --sim --admin --admin-port 8443  # Simulator mit App-Schnittstelle
 python3 -m tools.api_fixtures                             # JSON-Beispiele für die App erneuern
 (cd android && ./gradlew testDebugUnitTest assembleDebug)  # App testen und bauen
@@ -88,9 +88,10 @@ Im Simulator: Tasten `0-9 * #`, `a` Anrufen, `h` Auflegen, `m` Nachricht, `i` In
 2. **Notruf darf nie von I²C abhängen.** SOS-Knopf und Klappe hängen direkt an
    Pi-GPIOs (`PI_INPUTS`) und werden auch abgefragt, wenn der MCP23017 ausfällt.
    Ein ausgefallener Verstärker (TPA2016) darf den Notruf nicht verhindern.
-3. **Ansagetexte nur im `P`-Dict in `omafon/phone.py` ändern** und danach
-   `tools/prerender.py` neu laufen lassen, sonst fehlen die WAVs im Cache und die
-   Ansage kommt verzögert.
+3. **Ansagetexte nur im `P`-Dict in `omafon/phone.py` ändern.** Feste Ansagen mit
+   Platzhaltern (z. B. `f"Anruf von {name}."`) zusätzlich in `fixed_phrases()`
+   aufnehmen – nur diese Liste liegt dauerhaft im Cache. `tools/prerender.py`
+   rendert sie vorab, das Telefon rendert Fehlendes auch selbst im Leerlauf nach.
 4. Tests müssen ohne Hardware laufen: Hardware-Bibliotheken (`serial`, `smbus2`,
    `gpiozero`, `vosk`) nur lokal in Funktionen importieren.
 5. **Nachrichten nie automatisch vorlesen.** Neue SMS nur per Gong (wiederholt alle

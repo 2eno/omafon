@@ -11,6 +11,7 @@
   "unread": 0,
   "missed": 0,
   "restart_pending": false,
+  "time_known": true,
   "update": {
     "current": "0.9.0",
     "previous": "",

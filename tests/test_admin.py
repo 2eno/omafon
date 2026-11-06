@@ -405,6 +405,21 @@ class UpdateTests(unittest.TestCase):
             with self.assertRaises(UpdateError):
                 self.updater().check()
 
+    def test_refuses_when_disk_is_nearly_full(self):
+        import omafon.update as upd
+        self.publish("9.9.0")
+        up = self.updater()
+        up.check()
+        orig = upd.shutil.disk_usage
+        upd.shutil.disk_usage = lambda p: orig(p)._replace(free=5 * 2**20)
+        try:
+            with self.assertRaises(UpdateError) as e:
+                up.install()
+        finally:
+            upd.shutil.disk_usage = orig
+        self.assertIn("Speicher", str(e.exception))
+        self.assertFalse((self.data / "releases" / "9.9.0").exists())
+
     def test_missing_key_is_a_clean_error(self):
         self.publish("9.9.0")
         up = self.updater()
@@ -504,6 +519,39 @@ class LocalOnlyTests(unittest.TestCase):
         for ip in ("8.8.8.8", "2a00:1450::1", "::ffff:8.8.8.8", "", "quatsch"):
             self.assertFalse(local_peer(ip), ip)
         self.assertTrue(local_peer("8.8.8.8", allow_public=True))
+
+
+class LimitTests(AdminBase):
+    async def test_connection_limit(self):
+        from omafon.admin import MAX_CONNECTIONS
+        self.admin.opts.update(tls=False, bind="127.0.0.1")
+        self.admin.port = 0
+        await self.admin.start()
+        self.addAsyncCleanup(self.admin.stop)
+        idle = [await asyncio.open_connection("127.0.0.1", self.admin.port) for _ in range(MAX_CONNECTIONS)]
+        await asyncio.sleep(0.1)
+        self.assertEqual(self.admin._open, MAX_CONNECTIONS)
+        r, w = await asyncio.open_connection("127.0.0.1", self.admin.port)   # eine zu viel
+        w.write(b"GET /api/v1/info HTTP/1.1\r\n\r\n")
+        try:                                                                  # sofort zu: EOF oder
+            self.assertEqual(await asyncio.wait_for(r.read(), 2), b"")       # Reset (ungelesene Anfrage)
+        except ConnectionResetError:
+            pass
+        for _, iw in idle:
+            iw.close()
+        await asyncio.sleep(0.1)
+        r, w = await asyncio.open_connection("127.0.0.1", self.admin.port)   # danach wieder frei
+        w.write(b"GET /api/v1/info HTTP/1.1\r\n\r\n")
+        self.assertIn(b"200 OK", await asyncio.wait_for(r.read(), 2))
+
+    async def test_update_url_must_be_web_address(self):
+        tok = self.token()
+        for bad in ("file:///etc/shadow", "ftp://x", "https://a b"):
+            with self.subTest(url=bad), self.assertRaises(ApiError):
+                await self.admin.handle("PUT", "/api/v1/settings", self.auth(tok),
+                                        json.dumps({"values": {"update_url": bad}}).encode())
+        await self.admin.handle("PUT", "/api/v1/settings", self.auth(tok),
+                                json.dumps({"values": {"update_url": "https://updates.example.org/m.json"}}).encode())
 
 
 class UpdateApiTests(AdminBase):

@@ -56,6 +56,7 @@ log = logging.getLogger("omafon.admin")
 
 API = "/api/v1"
 MAX_BODY = 256 * 1024
+MAX_CONNECTIONS = 16          # gleichzeitig offene Verbindungen (je bis 15 s)
 PAIR_WINDOW_S = 300
 PAIR_ATTEMPTS = 5
 ADMIN_DEFAULTS = {"enabled": True, "port": 8443, "bind": "0.0.0.0", "tls": True,
@@ -200,6 +201,9 @@ def validate_setting(s: Setting, value):
         value = (value or "").strip()
         if len(value) > 300 or any(ord(c) < 32 for c in value):
             bad("zu lang oder ungültige Zeichen")
+        if s.key == "update_url" and value and (not value.startswith(("https://", "http://"))
+                                                 or any(c.isspace() for c in value)):
+            bad("Adresse muss mit https:// beginnen")
         return value or None
     if s.type == "hours":
         if (not isinstance(value, list) or len(value) != 2
@@ -290,6 +294,7 @@ class AdminServer:
         self.server: asyncio.base_events.Server | None = None
         self.port = int(self.opts["port"])
         self._bg: set[asyncio.Task] = set()
+        self._open = 0
 
     # ------------------------------------------------------------ Dateien
     def _device_id(self) -> str:
@@ -395,7 +400,7 @@ class AdminServer:
                 "state": p.state.name.lower(), "battery": hw.battery_percent(), "charging": hw.on_charger(),
                 "online": m.online, "connection": m.status_words() or "",
                 "unread": sum(not x["read"] for x in p.inbox), "missed": len(p.missed),
-                "restart_pending": bool(p.restart_reason)})
+                "restart_pending": bool(p.restart_reason), "time_known": bool(p.time_known())})
         if self.updater is not None:
             out["update"] = self.updater.info()
         return out
@@ -539,12 +544,23 @@ class AdminServer:
             self.server.close()
 
     async def _client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        status, body = 500, {"error": "Interner Fehler"}
         peer = writer.get_extra_info("peername")
         if not local_peer(peer[0] if peer else "", self.opts.get("allow_public", False)):
             log.warning("Verwaltung: Verbindung von %s abgelehnt (nicht im Heimnetz)", peer)
             writer.close()
             return
+        if self._open >= MAX_CONNECTIONS:          # niemand soll die Verwaltung zustopfen
+            log.warning("Verwaltung: zu viele Verbindungen, %s abgewiesen", peer)
+            writer.close()
+            return
+        self._open += 1
+        try:
+            await self._serve(reader, writer)
+        finally:
+            self._open -= 1
+
+    async def _serve(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        status, body = 500, {"error": "Interner Fehler"}
         try:
             method, path, headers, data = await asyncio.wait_for(_read_request(reader), 15)
             status, body = 200, await self.handle(method, path, headers, data)

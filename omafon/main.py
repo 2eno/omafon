@@ -36,6 +36,21 @@ async def ticker(events: asyncio.Queue) -> None:
         events.put_nowait("tick")
 
 
+async def network_time(clock, backend) -> None:
+    """Solange die Systemuhr nicht synchron ist (kein WLAN/NTP), Netzzeit vom
+    Mobilfunk übernehmen – sonst sagte die Info-Taste eine falsche Uhrzeit an."""
+    while True:
+        if not clock.synchronized():
+            try:
+                t = await backend.network_time()
+            except Exception as e:                      # nie den Start gefährden
+                log.warning("Netzzeit: %r", e)
+                t = None
+            if t is not None:
+                clock.set_network_time(t)
+        await asyncio.sleep(600 if clock.known() else 30)
+
+
 async def watchdog(phone: Phone) -> None:
     sd_notify("READY=1")
     last = -1
@@ -182,12 +197,22 @@ async def amain(args) -> None:
             log.error("TPA2016 fehlt: %s", e)
             amp = None
         audio = Audio(cfg, amp)
+        await audio.check_devices()   # vor baresip: es übernimmt cfg.audio_device
         hw = Hardware(cfg, events, loop)
         modem, _ = create_backend(cfg, events, loop)
         await modem.start()
         stt = Recognizer(cfg)
-    phone = Phone(cfg, audio, modem, stt, hw, events)
+    if args.sim:
+        phone = Phone(cfg, audio, modem, stt, hw, events)
+    else:
+        import time
+        from .clock import Clock
+        clock = Clock()
+        phone = Phone(cfg, audio, modem, stt, hw, events, clock=clock.now,
+                      monotonic=time.monotonic, time_known=clock.known)
     tasks = [phone.run(), ticker(events), watchdog(phone)]
+    if not args.sim:
+        tasks.append(network_time(clock, modem))
 
     # Updates (A/B mit Rückfall) und Companion-App
     from .update import CONFIRM_AFTER_S, Updater

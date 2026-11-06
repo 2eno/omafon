@@ -7,7 +7,9 @@ Ereignis-Warteschlange des Telefons.
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import logging
+import re
 import threading
 import time
 from . import pdu
@@ -17,6 +19,8 @@ __all__ = ["Modem", "SimModem", "ModemEvent", "ModemError"]
 
 log = logging.getLogger("omafon.modem")
 
+
+_HEX = re.compile(r"(?:[0-9A-Fa-f]{2})+")
 
 URC_PREFIXES = {
     "RING": "ring", "+CLIP:": "clip", "+CMTI:": "sms",
@@ -45,6 +49,8 @@ class Modem(TelephonyBackend):
         self._prefix = ""
         self._busy = False
         self._ref = 0
+        self._last_rx = 0.0              # wann zuletzt etwas vom Modem kam
+        self._dirty_since: float | None = None   # Befehl abgebrochen: Antwort kann noch kommen
 
     # ------------------------------------------------------------ Verbindung
     async def start(self) -> None:
@@ -70,7 +76,8 @@ class Modem(TelephonyBackend):
         else:
             raise ModemError("Modem antwortet nicht")
         for c in ("ATE0", "AT+CMEE=2", "AT+CLIP=1", "AT+CMGF=0",
-                  'AT+CPMS="ME","ME","ME"', "AT+CNMI=2,1,0,0,0", "AT+CLVL=4"):
+                  'AT+CPMS="ME","ME","ME"', "AT+CNMI=2,1,0,0,0", "AT+CLVL=4",
+                  "AT+CTZU=1"):                       # Uhr des Modems aus dem Netz stellen (NITZ)
             try:
                 await self.cmd(c)
             except ModemError as e:
@@ -106,6 +113,7 @@ class Modem(TelephonyBackend):
                     self._line(line)
 
     def _line(self, line: str) -> None:
+        self._last_rx = time.monotonic()
         if self._busy:
             if line == "OK":
                 self._done.set()
@@ -143,12 +151,14 @@ class Modem(TelephonyBackend):
         if self.ser is None:
             raise ModemError("Modem nicht verbunden")
         async with self._lock:
+            await self._settle()
             self._resp, self._error = [], None
             self._done.clear()
             self._prompt.clear()
             self._prefix = prefix if prefix is not None else (
                 command[2:].split("=")[0].split("?")[0] if command.startswith("AT+") else "")
             self._busy = True
+            finished = False
             try:
                 log.debug(">> %s", command)
                 try:
@@ -164,11 +174,27 @@ class Modem(TelephonyBackend):
                 ok = await self.loop.run_in_executor(None, self._done.wait, timeout)
                 if not ok:
                     raise ModemError(f"Zeitüberschreitung: {command}")
+                finished = True
                 if self._error:
                     raise ModemError(self._error)
                 return list(self._resp)
             finally:
                 self._busy = False
+                if not finished:                      # Zeitüberschreitung oder abgebrochen
+                    self._dirty_since = time.monotonic()
+
+    async def _settle(self, quiet: float = 0.5, limit: float = 3.0) -> None:
+        """Nach einem abgebrochenen Befehl erst warten, bis das Modem schweigt –
+        sonst beendet dessen verspätetes OK den nächsten Befehl zu früh, und alle
+        folgenden Antworten wären um eins verschoben."""
+        if self._dirty_since is None:
+            return
+        end = time.monotonic() + limit
+        while time.monotonic() < end:
+            if time.monotonic() - max(self._last_rx, self._dirty_since) >= quiet:
+                break
+            await asyncio.sleep(0.05)
+        self._dirty_since = None
 
     # ------------------------------------------------------------ Telefonie
     async def dial(self, number: str) -> None:
@@ -196,7 +222,9 @@ class Modem(TelephonyBackend):
     # ------------------------------------------------------------ SMS
     async def read_sms(self, index: int) -> pdu.Deliver | None:
         lines = await self.cmd(f"AT+CMGR={index}", prefix="+CMGR")
-        hexline = next((l for l in lines if not l.startswith("+CMGR")), None)
+        # Nur eine reine Hex-Zeile ist eine PDU – eine fremde Zeile (verspätete
+        # Antwort o. Ä.) darf nie als "unlesbare SMS" gelten, sonst würde gelöscht
+        hexline = next((l for l in lines if _HEX.fullmatch(l)), None)
         if not hexline:
             # Leere Antwort heißt nicht "keine SMS": oft ein verspätetes OK eines
             # früheren Befehls. Dann NICHT löschen lassen – beim nächsten Start
@@ -241,6 +269,16 @@ class Modem(TelephonyBackend):
         except ModemError:
             return False
 
+    async def network_time(self):
+        """Netzzeit (NITZ) über die Modem-Uhr: '+CCLK: "26/11/06,12:34:56+04"'
+        (Zeitzone in Viertelstunden). Ohne Netzzeit läuft die Modem-Uhr ab
+        2000/1980 – solche Werte gelten nicht."""
+        try:
+            line = next(l for l in await self.cmd("AT+CCLK?", prefix="+CCLK") if l.startswith("+CCLK"))
+        except (ModemError, StopIteration):
+            return None
+        return parse_cclk(line)
+
     async def gps_position(self, timeout: float = 30) -> tuple[float, float] | None:
         """Einmalige Ortung für den Notruf. Drinnen oft ohne Ergebnis."""
         try:
@@ -265,6 +303,24 @@ class Modem(TelephonyBackend):
             except ModemError:
                 pass
         return None
+
+
+def parse_cclk(line: str):
+    m = re.search(r'"(\d\d)/(\d\d)/(\d\d),(\d\d):(\d\d):(\d\d)([+-]\d+)?"', line)
+    if not m:
+        return None
+    try:
+        y, mo, d, h, mi, se = (int(x) for x in m.groups()[:6])
+        # Ohne Netzzeit startet die SIMCom-Uhr bei "80/01/06" = 1980, nicht 2080
+        t = dt.datetime((1900 if y >= 80 else 2000) + y, mo, d, h, mi, se)
+    except ValueError:
+        return None
+    if not 2025 <= t.year < 2080:
+        return None
+    if m.group(7) is not None:                    # über UTC in die Zeitzone des Systems
+        utc = t - dt.timedelta(minutes=15 * int(m.group(7)))
+        t = utc.replace(tzinfo=dt.timezone.utc).astimezone().replace(tzinfo=None)
+    return t
 
 
 class SimModem(TelephonyBackend):
