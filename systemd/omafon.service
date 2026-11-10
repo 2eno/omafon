@@ -1,5 +1,5 @@
 [Unit]
-Description=Omafon – sprechendes Telefon
+Description=Omafon – talking phone
 After=sound.target dev-ttyAMA0.device
 Wants=dev-ttyAMA0.device
 
@@ -11,11 +11,11 @@ WorkingDirectory=/opt/omafon
 User=omafon
 Group=omafon
 SupplementaryGroups=audio dialout gpio i2c
-# Hauptschleife hängt -> systemd startet neu
+# main loop hangs -> systemd restarts
 WatchdogSec=30
 Restart=always
 RestartSec=2
-# Höhere Priorität: Ziffernansage soll nie stocken
+# higher priority: the digit announcement must never stutter
 Nice=-5
 CacheDirectory=omafon
 

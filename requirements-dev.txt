@@ -1,5 +1,5 @@
-# Entwicklung am PC und CI.
-# Tests und Simulator (--sim) brauchen bewusst nur PyYAML: Hardware-Bibliotheken
-# (pyserial, smbus2, gpiozero, vosk) werden erst auf dem Pi importiert.
-# Wer alles installieren will:  pip install -r requirements.txt -r requirements-dev.txt
+# Development on a PC and CI.
+# Tests and the simulator (--sim) deliberately only need PyYAML: hardware libraries
+# (pyserial, smbus2, gpiozero, vosk) are only imported on the Pi.
+# To install everything:  pip install -r requirements.txt -r requirements-dev.txt
 pyyaml>=6.0
