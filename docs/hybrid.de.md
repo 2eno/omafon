@@ -89,7 +89,7 @@ umleiten. Omafon liest nur den AB der Fritz!Box vor.
 
 Grundlage ist die **Mobilfunk-Hardware** (SIM7600E-H) **plus Ladeschale** der
 Festnetz-Variante. Details zu Schale, Kontakten und Relais:
-[festnetz-hardware.md](festnetz-hardware.md).
+[festnetz-hardware.md](festnetz-hardware.de.md).
 
 ### Abweichungen gegenüber Festnetz
 
@@ -131,7 +131,7 @@ Akkuwarnungen bei 20/10/5 % kommen per Ansage.
 
 - LTE unten, also beim Telefonieren am Kinn statt am Ohr: weniger Abstrahlung zum Kopf.
 - Die Platinenantenne des Pi **nicht umbauen** (Funkzulassung, siehe
-  [festnetz-recherche.md](festnetz-recherche.md#4-zulassung-funkanlagengesetz--red)).
+  [festnetz-recherche.md](festnetz-recherche.de.md#4-zulassung-funkanlagengesetz--red)).
 - LTE-Band 7 (2,6 GHz) liegt nahe am WLAN (2,4 GHz). Abstand und Filter im Modem
   reichen in der Regel; bei Störungen im Test die LTE-Antenne weiter weg legen.
 
@@ -141,7 +141,7 @@ Akkuwarnungen bei 20/10/5 % kommen per Ansage.
   Gehäuse und Ladeschale nehmen das über `variante="hybrid"` aus
   `cad/omafon_masse.scad`. Das fertige Druckpaket liegt im CI-Artefakt unter
   `gehaeuse/hybrid/` und `ladeschale/hybrid/`. Teileliste und
-  Zusammenbau: [druckteile.md](druckteile.md).
+  Zusammenbau: [druckteile.md](druckteile.de.md).
 - Die SIM-Karte steckt im HAT über dem Pi. Zum Wechseln das Gehäuse öffnen
   (4 Schrauben hinten). Das ist selten nötig, und Oma muss da nie ran.
 
@@ -159,5 +159,5 @@ Akkuwarnungen bei 20/10/5 % kommen per Ansage.
 5. **Welcher Weg bei schwachem WLAN, aber gutem Mobilfunk für den Notruf?** Umgesetzt
    ist Mobilfunk (stabile Verbindung vor Adressübermittlung). Alternative:
    Festnetz trotzdem zuerst.
-6. Alle offenen Fragen aus [festnetz-recherche.md](festnetz-recherche.md#offene-fragen-auch-im-pull-request)
+6. Alle offenen Fragen aus [festnetz-recherche.md](festnetz-recherche.de.md#offene-fragen-auch-im-pull-request)
    gelten weiter (AB-Format, Notruf über IP-Telefon, baresip am Pi).

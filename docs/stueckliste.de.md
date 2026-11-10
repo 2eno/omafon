@@ -8,9 +8,9 @@ Für beide Varianten: **Festnetz** (Fritz!Box per WLAN, `backend: sip`) und
 
 Preise sind **Schätzungen** für Einzelstücke inklusive MwSt., ohne Versand (Stand
 Ende 2026). Geprüft gegen Händlerangaben sind nur Pi und Modem-HAT, siehe
-[festnetz-hardware.md](festnetz-hardware.md#quellen). Anschlüsse:
-[verkabelung.md](verkabelung.md). Gedruckte Teile und Montage:
-[druckteile.md](druckteile.md).
+[festnetz-hardware.md](festnetz-hardware.de.md#quellen). Anschlüsse:
+[verkabelung.md](verkabelung.de.md). Gedruckte Teile und Montage:
+[druckteile.md](druckteile.de.md).
 
 ## Elektronik
 
@@ -27,7 +27,7 @@ Ende 2026). Geprüft gegen Händlerangaben sind nur Pi und Modem-HAT, siehe
 | **Waveshare SIM7600E-H 4G HAT** | – | 1 | 90–100 | Jumper: UART B, PWR → D6, Flight offen |
 | LTE-Folienantenne (FPC, U.FL), 700–2700 MHz | – | 1–2 | 5–10 | Haupt- und optional Diversity-Antenne |
 | GNSS-Antenne aktiv, Keramik 25 × 25 mm, U.FL | – | 1 | 5–8 | in den Rahmen oben rechts im Deckel |
-| Nano-SIM mit **VoLTE**-Sprachtarif | – | 1 | Vertrag | VoLTE vorher testen (README) |
+| Nano-SIM mit **VoLTE**-Sprachtarif | – | 1 | Vertrag | VoLTE vorher testen (README.de.md) |
 
 ## Audio
 

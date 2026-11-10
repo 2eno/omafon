@@ -25,7 +25,7 @@ Gerät prüfen.
 - **Auch „kleinerer Akku“ stimmt nur halb.** Ohne Modem entfallen die 2-A-Sendespitzen.
   Akku und Spannungswandler dürfen also schwächer belastbar sein. Der Ruhestrom sinkt
   aber kaum (Modem in Ruhe ca. 0,1 W, Pi ca. 0,6 W, siehe
-  [festnetz-hardware.md](festnetz-hardware.md)). Mit gleich großem Akku hält die
+  [festnetz-hardware.md](festnetz-hardware.de.md)). Mit gleich großem Akku hält die
   Festnetz-Variante etwas länger; ein kleinerer Akku verkürzt die Bereitschaft.
 - Wichtiger Vorteil Festnetz: Beim Notruf 112 über den Festnetzanschluss übermittelt
   der Anbieter in der Regel die Anschlussadresse. GPS wird damit weniger wichtig

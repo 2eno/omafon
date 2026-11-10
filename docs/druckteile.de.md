@@ -132,8 +132,8 @@ anprobieren → B, E, G → restliche Kappen → C, D (Ladeschale).
 | Federkontakt (Pogo-Pin) Ø 2 mm, Magnet 8 × 3 mm | 5 / 2 | Ladeschale |
 | Gummifüße Ø 10, Stahlscheiben 150–250 g, M3 × 8 | 4 / – / 2 | Ladeschale |
 
-Elektronik siehe [stueckliste.md](stueckliste.md), Anschlüsse in
-[verkabelung.md](verkabelung.md).
+Elektronik siehe [stueckliste.md](stueckliste.de.md), Anschlüsse in
+[verkabelung.md](verkabelung.de.md).
 
 ## Zusammenbau Handteil
 

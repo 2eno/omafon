@@ -177,5 +177,5 @@ im Handteil wie in der Schale gleich. Die Kodierrippe verhindert falsches Einste
    (`python3 -m omafon.main --config /etc/omafon/config.yaml -v`). Jede Taste muss
    sofort angesagt werden. Den Notruf bei geöffneter Klappe antesten, dabei **vor
    Ablauf der 3 Sekunden loslassen**.
-5. (H) Modem-Test aus der README (`minicom`, VoLTE-Anruf), danach Ton über den
+5. (H) Modem-Test aus der [README](../README.de.md) (`minicom`, VoLTE-Anruf), danach Ton über den
    Mischer prüfen.
