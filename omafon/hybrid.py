@@ -1,23 +1,23 @@
-"""Backend "hybrid": ein Gerät, zwei Wege – Fritz!Box zu Hause, Mobilfunk unterwegs.
+"""Backend "hybrid": one device, two paths – Fritz!Box at home, mobile on the go.
 
-Beide Backends laufen gleichzeitig (BaresipBackend = "home", Modem = "mobile").
-Jedes schreibt in eine eigene Warteschlange; HybridBackend leitet die Ereignisse
-gefiltert an Phone weiter. Phone merkt davon nichts.
+Both backends run at the same time (BaresipBackend = "home", modem = "mobile").
+Each writes to its own queue; HybridBackend forwards the events to Phone,
+filtered. Phone doesn't notice any of this.
 
-Regeln (Begründung in docs/hybrid.md):
-  * Klingeln: wer zuerst klingelt, gehört das Gespräch. Klingelt der andere Weg
-    währenddessen, wird dort abgewiesen (kein Anklopfen – zu verwirrend).
-  * Wählen: normal über `prefer` (Standard: home), sonst über den anderen Weg.
-    Notruf 110/112: zu Hause über das Festnetz (Anschlussadresse geht mit),
-    sonst Mobilfunk. Scheitert ein Weg, sofort der andere.
-  * Nachrichten: SMS (mobile) und Anrufbeantworter (home) landen gemeinsam im
-    Posteingang; die Nummern werden umgeschlüsselt.
-  * SMS senden: über Mobilfunk; ohne Netz über Telegram/E-Mail (notify).
-  * Verbindung: "Kein Netz" erst, wenn BEIDE Wege weg sind. Wechsel zwischen
-    zu Hause und unterwegs wird nur mit announce_mode angesagt.
-  * Sparmodus (home_modem: off): ist die Fritz!Box stabil erreichbar, geht der
-    Mobilfunk in den Flugmodus und wacht beim Verlassen der Wohnung wieder auf.
-    Für Notruf-SMS und Notruf über Mobilfunk wird er sofort eingeschaltet.
+Rules (rationale in docs/hybrid.md):
+  * Ringing: whoever rings first owns the call. If the other path rings
+    meanwhile, it is rejected there (no call waiting – too confusing).
+  * Dialing: normally via `prefer` (default: home), otherwise via the other
+    path. Emergency 110/112: at home via the landline (the line address is
+    transmitted), otherwise mobile. If one path fails, the other one right away.
+  * Messages: SMS (mobile) and answering machine (home) end up together in the
+    inbox; the numbers are re-keyed.
+  * Sending SMS: via mobile; without a network via Telegram/e-mail (notify).
+  * Connection: "no network" only when BOTH paths are gone. Switching between
+    home and on the go is only announced with announce_mode.
+  * Power saving (home_modem: off): if the Fritz!Box is reliably reachable, the
+    mobile part goes into airplane mode and wakes up again when leaving home.
+    It is switched on immediately for emergency SMS and emergency calls.
 """
 from __future__ import annotations
 
@@ -31,15 +31,15 @@ from .telephony import ModemError, ModemEvent, TelephonyBackend
 log = logging.getLogger("omafon.hybrid")
 
 HYBRID_DEFAULTS = {
-    "prefer": "home",              # home | mobile – Weg für normale Anrufe
-    "emergency_prefer": "home",    # Weg für 110/112, wenn beide gehen
-    "home_modem": "on",            # on | off (Sparmodus zu Hause)
-    "radio_off_after_s": 300,      # so lange muss die Fritz!Box stabil sein
-    "radio_wake_s": 45,            # Mobilfunk braucht nach dem Einschalten so lange
-    "mobile_poll_s": 30,           # Empfang (AT+CSQ) abfragen
-    "no_network_grace_s": 10,      # erst danach "Kein Netz" ansagen
-    "announce_mode": False,        # "Zu Hause …" / "Unterwegs …" ansagen
-    "weak_wifi_dbm": -75,          # schwächeres WLAN (Garten, Wohnungsrand): lieber Mobilfunk
+    "prefer": "home",              # home | mobile – path for normal calls
+    "emergency_prefer": "home",    # path for 110/112 when both work
+    "home_modem": "on",            # on | off (power saving at home)
+    "radio_off_after_s": 300,      # the Fritz!Box must be stable this long
+    "radio_wake_s": 45,            # mobile needs this long after switching on
+    "mobile_poll_s": 30,           # query reception (AT+CSQ)
+    "no_network_grace_s": 10,      # only then announce "no network"
+    "announce_mode": False,        # announce "Zu Hause …" / "Unterwegs …"
+    "weak_wifi_dbm": -75,          # weaker Wi-Fi (garden, edge of the flat): prefer mobile
 }
 EMERGENCY = ("112", "110")
 CALL_EVENTS = ("call_begin", "call_end", "no_carrier", "busy", "no_answer", "missed")
@@ -52,15 +52,15 @@ class HybridBackend(TelephonyBackend):
     offline_key = "no_network"
 
     def __init__(self, cfg, events: asyncio.Queue, home, mobile, clock=time.monotonic):
-        """home/mobile: Fabriken, die mit einer Warteschlange ein Backend bauen."""
+        """home/mobile: factories that build a backend from a queue."""
         self.cfg, self.events, self.clock = cfg, events, clock
         self.opt = {**HYBRID_DEFAULTS, **(getattr(cfg, "hybrid", None) or {})}
-        hm = self.opt["home_modem"]              # YAML liest on/off ohne Anführungszeichen als bool
+        hm = self.opt["home_modem"]              # YAML reads unquoted on/off as bool
         self.opt["home_modem"] = ("on" if hm else "off") if isinstance(hm, bool) else str(hm)
         self.q = {"home": asyncio.Queue(), "mobile": asyncio.Queue()}
         self.home = home(self.q["home"])
         self.mobile = mobile(self.q["mobile"])
-        self.active: str | None = None           # wem gehört das laufende Gespräch
+        self.active: str | None = None           # who owns the current call
         self.mobile_csq: int | None = None
         self.mobile_started = False
         self.radio_on = True
@@ -75,7 +75,7 @@ class HybridBackend(TelephonyBackend):
         self._last_poll = -1e9
         self._started = False
 
-    # ------------------------------------------------------------ Zustand
+    # ------------------------------------------------------------ State
     def leg(self, name: str) -> TelephonyBackend:
         return self.home if name == "home" else self.mobile
 
@@ -105,11 +105,11 @@ class HybridBackend(TelephonyBackend):
 
     # ------------------------------------------------------------ Start
     async def start(self) -> None:
-        if self._started:                        # Phone hat das Modem neu gestartet
+        if self._started:                        # Phone restarted the modem
             await self._start_mobile()
             return
         self._started = True
-        await self.home.start()                  # wirft nie
+        await self.home.start()                  # never raises
         await self._start_mobile()
         for name in ("home", "mobile"):
             self._tasks.append(asyncio.create_task(self._pump(name), name=f"hybrid-{name}"))
@@ -120,9 +120,9 @@ class HybridBackend(TelephonyBackend):
             await self.mobile.start()
             self.mobile_started = True
             await self.poll_mobile()
-        except ModemError as e:                  # Festnetz geht trotzdem
+        except ModemError as e:                  # the landline works anyway
             self.mobile_started = False
-            log.error("Mobilfunk startet nicht: %s", e)
+            log.error("Mobile part does not start: %s", e)
 
     async def stop(self) -> None:
         for t in self._tasks:
@@ -130,18 +130,18 @@ class HybridBackend(TelephonyBackend):
         if hasattr(self.home, "stop"):
             await self.home.stop()
 
-    # ------------------------------------------------------------ Ereignisse
+    # ------------------------------------------------------------ Events
     async def _pump(self, name: str) -> None:
         while True:
             ev = await self.q[name].get()
             try:
                 await self.route(name, ev)
             except Exception:
-                log.exception("Ereignis %s von %s", ev, name)
+                log.exception("Event %s from %s", ev, name)
 
     async def route(self, name: str, ev: ModemEvent) -> None:
         k = ev.kind
-        if k in ("link_lost", "link_ok"):        # nur intern: Gesamtzustand zählt
+        if k in ("link_lost", "link_ok"):        # internal only: the overall state counts
             self.update_link()
             return
         if k == "sms":
@@ -151,7 +151,7 @@ class HybridBackend(TelephonyBackend):
             return
         if k == "ring":
             if self.active and self.active != name:
-                log.info("Anruf über %s abgewiesen – Gespräch über %s läuft", name, self.active)
+                log.info("Call via %s rejected – call via %s in progress", name, self.active)
                 try:
                     await self.leg(name).hangup()
                 except ModemError:
@@ -163,7 +163,7 @@ class HybridBackend(TelephonyBackend):
             if self.active == name:
                 self._emit(k, ev.data)
         elif k in CALL_EVENTS:
-            if self.active != name:              # Nachhall eines abgewiesenen Anrufs
+            if self.active != name:              # echo of a rejected call
                 return
             if k != "call_begin":
                 self.active = None
@@ -171,17 +171,17 @@ class HybridBackend(TelephonyBackend):
         else:
             self._emit(k, ev.data)
 
-    # ------------------------------------------------------------ Überwachung
+    # ------------------------------------------------------------ Monitoring
     async def _supervise(self) -> None:
         while True:
             await asyncio.sleep(1)
             try:
                 await self.tick()
             except Exception:
-                log.exception("Fehler in der Hybrid-Überwachung")
+                log.exception("Error in hybrid monitoring")
 
     async def tick(self) -> None:
-        """Einmal prüfen (öffentlich für Tests)."""
+        """Check once (public for tests)."""
         if self.clock() - self._last_poll >= float(self.opt["mobile_poll_s"]):
             await self.poll_mobile()
         await self._power_policy()
@@ -207,21 +207,21 @@ class HybridBackend(TelephonyBackend):
                 await self.set_radio(False)
         else:
             self.home_stable_since = None
-            if not self.radio_on:                # Wohnung verlassen / WLAN weg
+            if not self.radio_on:                # left home / Wi-Fi gone
                 await self.set_radio(True)
 
     async def set_radio(self, on: bool, wait: bool = False) -> None:
-        log.info("Mobilfunk %s", "an" if on else "aus (Sparmodus)")
+        log.info("Mobile %s", "an" if on else "aus (Sparmodus)")
         try:
             await self.mobile.set_radio(on)
         except ModemError as e:
-            log.error("Funkteil schalten: %s", e)
+            log.error("Switching radio: %s", e)
             return
         self.radio_on = on
         if on:
             self.radio_on_since = self.clock()
             self._last_poll = -1e9
-            if wait:                             # auf Netz warten (Notruf-SMS)
+            if wait:                             # wait for the network (emergency SMS)
                 for _ in range(int(float(self.opt["radio_wake_s"]))):
                     await self.poll_mobile()
                     if self.mobile_ok:
@@ -249,7 +249,7 @@ class HybridBackend(TelephonyBackend):
             self.announced_down = True
             self._emit("link_lost", "no_network")
 
-    # ------------------------------------------------------------ Telefonie
+    # ------------------------------------------------------------ Telephony
     def wifi_weak(self) -> bool:
         dbm = self.home._wifi_dbm() if hasattr(self.home, "_wifi_dbm") else None
         return dbm is not None and dbm < float(self.opt["weak_wifi_dbm"])
@@ -257,7 +257,7 @@ class HybridBackend(TelephonyBackend):
     def _order(self, number: str) -> list[str]:
         first = self.opt["emergency_prefer"] if number in EMERGENCY else self.opt["prefer"]
         if first == "home" and self.home.online and self.mobile_ok and self.wifi_weak():
-            first = "mobile"                     # Gespräch würde am WLAN-Rand abreißen
+            first = "mobile"                     # the call would drop at the edge of the Wi-Fi
         return [first, "mobile" if first == "home" else "home"]
 
     async def dial(self, number: str) -> None:
@@ -271,7 +271,7 @@ class HybridBackend(TelephonyBackend):
                 if not self.mobile_started:
                     errors.append("Mobilfunkteil antwortet nicht")
                     continue
-                if not self.radio_on:            # Sparmodus: aufwecken
+                if not self.radio_on:            # power saving: wake up
                     await self.set_radio(True, wait=number not in EMERGENCY)
                 if not self.mobile_ok and number not in EMERGENCY:
                     errors.append("kein Mobilfunknetz")
@@ -279,7 +279,7 @@ class HybridBackend(TelephonyBackend):
             try:
                 self.active = name
                 await self.leg(name).dial(number)
-                log.info("Wähle %s über %s", number, name)
+                log.info("Dialing %s via %s", number, name)
                 return
             except ModemError as e:
                 self.active = None
@@ -309,13 +309,13 @@ class HybridBackend(TelephonyBackend):
         return self.mobile_csq if self.mobile_ok else None
 
     async def alive(self) -> bool:
-        """Gesundheit des Mobilfunkteils – Phone startet es sonst neu.
-        Der Festnetzweg repariert sich selbst."""
+        """Health of the mobile part – otherwise Phone restarts it.
+        The landline path repairs itself."""
         if not self.mobile_started:
             return False
         return await self.mobile.alive()
 
-    # ------------------------------------------------------------ Nachrichten
+    # ------------------------------------------------------------ Messages
     def can_send_to(self, number: str) -> bool:
         return self.mobile_started or self.home.can_send_to(number)
 
@@ -327,8 +327,8 @@ class HybridBackend(TelephonyBackend):
                 try:
                     return await self.mobile.send_sms(number, text)
                 except ModemError as e:
-                    log.warning("SMS über Mobilfunk gescheitert, versuche Push: %s", e)
-        await self.home.send_sms(number, text)    # Telegram/E-Mail (wirft, wenn kein Weg)
+                    log.warning("SMS via mobile failed, trying push: %s", e)
+        await self.home.send_sms(number, text)    # Telegram/e-mail (raises if there is no path)
 
     async def stored_indices(self) -> list[int]:
         out = []
@@ -339,7 +339,7 @@ class HybridBackend(TelephonyBackend):
                     self.msg_map[self._next] = (name, idx)
                     out.append(self._next)
             except ModemError as e:
-                log.warning("Gespeicherte Nachrichten (%s): %s", name, e)
+                log.warning("Stored messages (%s): %s", name, e)
         return out
 
     async def read_sms(self, index: int):
@@ -355,7 +355,7 @@ class HybridBackend(TelephonyBackend):
 
     async def gps_position(self, timeout: float = 30):
         home = getattr(self.cfg, "home_position", None)
-        if self.home.online and home:            # zu Hause: Adresse statt GPS (drinnen schlecht)
+        if self.home.online and home:            # at home: address instead of GPS (poor indoors)
             return tuple(home)
         if self.mobile_started:
             if not self.radio_on:
@@ -365,7 +365,7 @@ class HybridBackend(TelephonyBackend):
 
 
 class HybridSimulator:
-    """Steuerung für Simulator und Tests: SipSimulator + SimModem zusammen."""
+    """Control for the simulator and tests: SipSimulator + SimModem together."""
 
     def __init__(self, cfg, echo: bool = True):
         from .sipsim import SipSimulator
@@ -385,9 +385,9 @@ class HybridSimulator:
                                     mobile=make_mobile, clock=clock)
         return self.hybrid
 
-    # Konsole/Tests
+    # console/tests
     def inject_call(self, number: str) -> None:
-        """Anruf auf die Festnetznummer, wenn zu Hause – sonst aufs Handy."""
+        """Call to the landline number when at home – otherwise to the mobile."""
         if self.hybrid and self.hybrid.home.online:
             self.sip.inject_call(number)
         else:
@@ -409,9 +409,9 @@ class HybridSimulator:
             self.modem.inject(kind, data)
 
     def link(self, up: bool) -> None:
-        """WLAN/Fritz!Box an oder aus (Wohnung verlassen/betreten)."""
+        """Wi-Fi/Fritz!Box on or off (leaving/entering home)."""
         self.sip.link(up)
 
     def netz(self, up: bool) -> None:
-        """Mobilfunknetz an oder aus (Funkloch)."""
+        """Mobile network on or off (dead zone)."""
         self.modem.csq = 22 if up else 99

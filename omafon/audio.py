@@ -1,9 +1,9 @@
-"""Sprachausgabe, Töne und Verstärkersteuerung.
+"""Speech output, tones and amplifier control.
 
-Grundsatz: Eine neue Ansage unterbricht die alte sofort. Feste Ansagen
-(Ziffern, Menüs, Kontaktnamen) werden einmalig mit tools/prerender.py
-erzeugt und liegen als WAV im Cache – dadurch startet die Ziffernansage
-ohne spürbare Verzögerung.
+Principle: a new announcement interrupts the old one immediately. Fixed
+announcements (digits, menus, contact names) are generated once with
+tools/prerender.py and kept as WAV in the cache – so the digit announcement
+starts without noticeable delay.
 """
 from __future__ import annotations
 
@@ -20,20 +20,20 @@ log = logging.getLogger("omafon.audio")
 
 
 class TPA2016:
-    """TPA2016D2 (I²C 0x58): Kanal L = Hörkapsel, Kanal R = Lautsprecher.
+    """TPA2016D2 (I²C 0x58): channel L = earpiece, channel R = speaker.
 
-    Registerbelegung nach Datenblatt/Adafruit-Bibliothek – vor dem Einsatz prüfen:
-      0x01 Bit7 SPK_EN_R, Bit6 SPK_EN_L
-      0x05 Fixed Gain (−28…+30 dB, 6 Bit Zweierkomplement)
-      0x06 Bit7 Limiter aus, Bit4:0 Ausgangsbegrenzung
-      0x07 Bit7:4 maximale AGC-Verstärkung, Bit1:0 Kompression
+    Register layout per datasheet/Adafruit library – verify before use:
+      0x01 bit7 SPK_EN_R, bit6 SPK_EN_L
+      0x05 fixed gain (−28…+30 dB, 6-bit two's complement)
+      0x06 bit7 limiter off, bit4:0 output limit
+      0x07 bit7:4 maximum AGC gain, bit1:0 compression
     """
     ADDR = 0x58
 
     def __init__(self, bus: int = 1):
-        from smbus2 import SMBus  # nur auf dem Pi vorhanden
+        from smbus2 import SMBus  # only available on the Pi
         self.bus = SMBus(bus)
-        # Kompression 2:1, Limiter an – hält Sprache laut und kappt Spitzen.
+        # compression 2:1, limiter on – keeps speech loud and clips peaks.
         self.bus.write_byte_data(self.ADDR, 0x07, (0x0C << 4) | 0x01)
 
     def route(self, earpiece: bool, speaker: bool) -> None:
@@ -46,12 +46,12 @@ class TPA2016:
         self.bus.write_byte_data(self.ADDR, 0x05, db & 0x3F)
 
     def limit(self, level: int) -> None:
-        """0 (leise) … 31 (laut). Für die Hörkapsel niedrig halten – Gehörschutz."""
+        """0 (quiet) … 31 (loud). Keep it low for the earpiece – hearing protection."""
         self.bus.write_byte_data(self.ADDR, 0x06, max(0, min(31, level)))
 
 
 class Audio:
-    # Lautstärke 1..5 -> Verstärkung in dB (Lautsprecher / Hörkapsel)
+    # volume 1..5 -> gain in dB (speaker / earpiece)
     SPEAKER_DB = {1: 6, 2: 12, 3: 18, 4: 24, 5: 30}
     EARPIECE_DB = {1: -6, 2: 0, 3: 4, 4: 8, 5: 12}
 
@@ -66,9 +66,9 @@ class Audio:
         self.volume = cfg.volume
         self._make_tones()
 
-    # ------------------------------------------------------------ Töne
+    # ------------------------------------------------------------ Tones
     def _tone(self, name: str, parts: list[tuple[float, float]], vol: float = 0.6) -> Path:
-        """parts = [(Frequenz Hz oder 0 für Pause, Dauer s), ...]"""
+        """parts = [(frequency Hz or 0 for a pause, duration s), ...]"""
         path = self.cache / f"tone_{name}.wav"
         if path.exists():
             return path
@@ -80,7 +80,7 @@ class Audio:
             for freq, dur in parts:
                 n = int(rate * dur)
                 for i in range(n):
-                    env = min(1.0, i / 200, (n - i) / 200)  # weiche Flanken, kein Knacken
+                    env = min(1.0, i / 200, (n - i) / 200)  # soft edges, no clicks
                     v = math.sin(2 * math.pi * freq * i / rate) * vol * env if freq else 0
                     w.writeframes(struct.pack("<h", int(v * 32767)))
         return path
@@ -94,9 +94,9 @@ class Audio:
             "sos": self._tone("sos", [(1200, 0.2), (0, 0.1)] * 3),
         }
 
-    # ------------------------------------------------------------ Verstärker
+    # ------------------------------------------------------------ Amplifier
     def route(self, mode: str) -> None:
-        """'speaker', 'earpiece' oder 'both'."""
+        """'speaker', 'earpiece' or 'both'."""
         self.route_mode = mode
         self._apply()
 
@@ -116,9 +116,9 @@ class Audio:
             self.amp.gain(table[self.volume])
             self.amp.limit(12 if ear and not spk else 31)
         except OSError as e:
-            log.error("Verstärker nicht erreichbar: %s", e)
+            log.error("Amplifier not reachable: %s", e)
 
-    # ------------------------------------------------------------ Sprache
+    # ------------------------------------------------------------ Speech
     def _cache_path(self, text: str) -> Path:
         key = f"{self.cfg.piper_model}|{self.cfg.speech_rate}|{text}"
         return self.cache / (hashlib.sha1(key.encode()).hexdigest()[:16] + ".wav")
@@ -132,10 +132,10 @@ class Audio:
             cmd = [self.cfg.piper_bin, "--model", self.cfg.piper_model,
                    "--length_scale", str(self.cfg.speech_rate), "--output_file", str(tmp)]
         elif shutil.which("espeak-ng"):
-            log.warning("Piper fehlt – Notlösung espeak-ng")
+            log.warning("Piper missing – falling back to espeak-ng")
             cmd = ["espeak-ng", "-v", "de", "-s", "135", "-w", str(tmp), text]
         else:
-            log.error("Keine Sprachausgabe installiert")
+            log.error("No speech output installed")
             return None
         proc = await asyncio.create_subprocess_exec(
             *cmd, stdin=asyncio.subprocess.PIPE,
@@ -144,7 +144,7 @@ class Audio:
         if proc.returncode == 0 and tmp.exists():
             tmp.rename(path)
             return path
-        log.error("Sprachsynthese fehlgeschlagen: %r", text)
+        log.error("Speech synthesis failed: %r", text)
         return None
 
     async def stop(self) -> None:
@@ -168,12 +168,12 @@ class Audio:
             await self._proc.wait()
 
     async def say(self, text: str, interrupt: bool = True) -> None:
-        """Spricht text. Kehrt zurück, wenn fertig oder unterbrochen.
+        """Speaks text. Returns when finished or interrupted.
 
-        Eine neuere Ansage gewinnt immer: Ist während der Synthese schon die
-        nächste angefordert worden, wird diese hier verworfen.
+        A newer announcement always wins: if the next one was already requested
+        during synthesis, this one is dropped here.
         """
-        log.info("SAGT: %s", text)
+        log.info("SAYS: %s", text)
         self._gen = getattr(self, "_gen", 0) + (1 if interrupt else 0)
         gen = self._gen
         if interrupt:
@@ -188,7 +188,7 @@ class Audio:
 
 
 class SimAudio(Audio):
-    """Für Tests und den PC: schreibt Ansagen in eine Liste statt abzuspielen."""
+    """For tests and the PC: writes announcements to a list instead of playing them."""
 
     def __init__(self, cfg, echo: bool = True):
         self.cfg, self.amp, self.echo = cfg, None, echo

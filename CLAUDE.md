@@ -1,111 +1,117 @@
 # CLAUDE.md – Omafon
 
-## Projektüberblick
+## Project overview
 
-Omafon ist ein sprechendes Telefon für Menschen mit starker Sehbehinderung.
-Jeder Tastendruck wird angesagt, eingehende Anrufe und SMS werden vorgelesen,
-SMS können diktiert werden, und ein Notrufknopf ruft eine Kette von Kontakten an.
+Omafon is a talking phone for people with severe visual impairment.
+Every key press is announced, incoming calls and SMS are read aloud,
+SMS can be dictated, and an emergency button calls a chain of contacts.
 
-- Zwei Varianten: **Festnetz** (Fritz!Box per WLAN/SIP, `backend: sip`) und
-  **Hybrid** (zusätzlich LTE-Modem für unterwegs, `backend: hybrid`). Ein reines
-  Handy gibt es nicht mehr; `modem.py` ist nur noch der Mobilfunkteil des Hybrids.
-- Hardware: Raspberry Pi Zero 2 W, MCP23017 (Ziffernblock per I²C), TPA2016
-  (Verstärker), MAX17048 (Akku), CM108-Soundkarte, Ladeschale; Hybrid zusätzlich
-  Waveshare SIM7600E-H 4G HAT. Stückliste/Verkabelung: `docs/stueckliste.md`,
+- Two variants: **landline** (Fritz!Box via Wi-Fi/SIP, `backend: sip`) and
+  **hybrid** (additionally an LTE modem for on the go, `backend: hybrid`). There is
+  no pure mobile phone any more; `modem.py` is only the cellular part of the hybrid.
+- Hardware: Raspberry Pi Zero 2 W, MCP23017 (keypad via I²C), TPA2016
+  (amplifier), MAX17048 (battery), CM108 sound card, charging cradle; the hybrid
+  adds a Waveshare SIM7600E-H 4G HAT. Bill of materials/wiring: `docs/stueckliste.md`,
   `docs/verkabelung.md`.
-- Software: Python 3 (asyncio), eine Ereignis-Warteschlange, ein Zustandsautomat.
-- Sprachausgabe: Piper (Fallback espeak-ng), feste Ansagen vorab gerendert.
-- Spracherkennung: Vosk offline, optional eigener Whisper-Server.
-- Gehäuseteile: OpenSCAD (`cad/`).
+- Software: Python 3 (asyncio), one event queue, one state machine.
+- Speech output: Piper (fallback espeak-ng), fixed announcements pre-rendered.
+- Speech recognition: Vosk offline, optionally your own Whisper server.
+- Housing parts: OpenSCAD (`cad/`).
 
-Status: Software im Simulator getestet, Hardware ungetestet.
+Status: software tested in the simulator, hardware untested.
 
-## Modulübersicht
+**Language:** code, comments, logs and developer docs are English. Everything the
+user hears or reads on the device (announcements in `P`, SMS/notification texts,
+number words) stays **German**, as do the values in the example configs and the
+OpenSCAD parameter names (`teil`, `variante`, `ziffer`, …). Every doc has a German
+version `*.de.md`; keep both in sync.
 
-| Datei | Aufgabe |
+## Module overview
+
+| File | Purpose |
 |---|---|
-| `omafon/main.py` | Start, systemd-Watchdog, PC-Simulator (`--sim`) |
-| `omafon/phone.py` | Zustandsautomat (Wählen, Anrufe, SMS, Diktat, Notruf); `P`-Dict mit allen festen Ansagen |
-| `omafon/telephony.py` | Schnittstelle `TelephonyBackend`, `create_backend()` (config `backend: sip \| hybrid`) |
-| `omafon/modem.py` | Mobilfunkteil des Hybrids: AT-Treiber SIM7600, URC-Auswertung; `SimModem` für Tests |
-| `omafon/sip.py` | Backend `sip`: baresip über ctrl_tcp, Fritz!Box-AB und -Telefonbuch, Verbindungsüberwachung |
-| `omafon/sipsim.py` | `FakeBaresip` (ctrl_tcp-Server), `SipSimulator`, `LogNotifier` für Tests und `--sim` |
-| `omafon/hybrid.py` | Backend `hybrid`: Fritz!Box + Mobilfunk gleichzeitig, Routing, Sparmodus; `HybridSimulator` |
-| `omafon/fritz.py` | TR-064 (fritzconnection), XML-Parser, `SimFritzBox` |
-| `omafon/notify.py` | Telegram/E-Mail als SMS-Ersatz (Notruf-Hinweis, Diktat), standardmäßig aus |
-| `omafon/pdu.py` | SMS im PDU-Modus (GSM-7, UCS-2, lange SMS) |
-| `omafon/audio.py` | Piper mit WAV-Cache, Töne, TPA2016-Ansteuerung; `SimAudio` |
-| `omafon/stt.py` | Vosk (Namen mit Grammatik, Diktat), optional Whisper; `SimRecognizer` |
-| `omafon/hardware.py` | Tastenabfrage 100 Hz, Entprellung (`KeyTracker`), Akku, Vibration; `SimHardware` |
-| `omafon/numbers.py` | Ziffernwörter ("zwo"), Nummern in Gruppen, Uhrzeit/Datum |
-| `omafon/config.py` | `config.yaml` laden, Kontakte, Notrufkette |
-| `tools/prerender.py` | Alle festen Ansagen vorab als WAV erzeugen |
-| `tests/test_omafon.py` | Kern-Tests (Tasten, Anrufe, SMS, Notruf) mit SimModem ohne Hardware |
-| `tests/test_festnetz.py` | SIP-Backend gegen FakeBaresip, Fritz!Box, Ladeschale |
-| `tests/test_hybrid.py` | Hybrid-Routing, Notruf, Zweitanruf, Sparmodus |
-| `cad/omafon_masse.scad` | Gemeinsame Maße Handteil/Ladeschale je `variante` (festnetz 30 mm, hybrid 36 mm dick) |
-| `cad/omafon_gehaeuse.scad` | Handteil-Gehäuse: pruefstueck, deckel (mit Schalterplatte), wanne, tastengitter, akkudeckel, notrufklappe, lautstaerke_*, hoererkopf, hoermuschel; STL in Druckrichtung |
-| `cad/omafon_ladeschale.scad` | Ladeschale mit Lautsprecher, Federkontakten, Kodierrippe |
-| `docs/druckteile.md` | Teileliste, Druckeinstellungen, Kaufteile, Zusammenbau (liegt auch im STL-Paket) |
-| `config.festnetz.example.yaml`, `config.hybrid.example.yaml` | Beispielkonfigurationen (nur Platzhalter) |
-| `docs/stueckliste.md`, `docs/verkabelung.md` | Stückliste mit Preisen, Verkabelung/Pinbelegung beider Varianten |
-| `cad/omafon_tasten.scad` | Tastenkappen und Tastenfront, parametrisch |
-| `systemd/omafon.service` | Dienst mit Watchdog |
+| `omafon/main.py` | Startup, systemd watchdog, PC simulator (`--sim`) |
+| `omafon/phone.py` | State machine (dialling, calls, SMS, dictation, emergency call); `P` dict with all fixed announcements |
+| `omafon/telephony.py` | Interface `TelephonyBackend`, `create_backend()` (config `backend: sip \| hybrid`) |
+| `omafon/modem.py` | Cellular part of the hybrid: SIM7600 AT driver, URC parsing; `SimModem` for tests |
+| `omafon/sip.py` | Backend `sip`: baresip via ctrl_tcp, Fritz!Box answering machine and phone book, connection monitoring |
+| `omafon/sipsim.py` | `FakeBaresip` (ctrl_tcp server), `SipSimulator`, `LogNotifier` for tests and `--sim` |
+| `omafon/hybrid.py` | Backend `hybrid`: Fritz!Box + cellular at the same time, routing, power saving; `HybridSimulator` |
+| `omafon/fritz.py` | TR-064 (fritzconnection), XML parser, `SimFritzBox` |
+| `omafon/notify.py` | Telegram/e-mail as an SMS substitute (emergency notice, dictation), off by default |
+| `omafon/pdu.py` | SMS in PDU mode (GSM-7, UCS-2, long SMS) |
+| `omafon/audio.py` | Piper with WAV cache, tones, TPA2016 control; `SimAudio` |
+| `omafon/stt.py` | Vosk (names with grammar, dictation), optionally Whisper; `SimRecognizer` |
+| `omafon/hardware.py` | Key polling at 100 Hz, debouncing (`KeyTracker`), battery, vibration; `SimHardware` |
+| `omafon/numbers.py` | Digit words ("zwo"), numbers in groups, time/date |
+| `omafon/config.py` | Load `config.yaml`, contacts, emergency chain |
+| `tools/prerender.py` | Pre-render all fixed announcements as WAV |
+| `tests/test_omafon.py` | Core tests (keys, calls, SMS, emergency call) with SimModem, no hardware; checks the wiring docs against `hardware.py` |
+| `tests/test_festnetz.py` | SIP backend against FakeBaresip, Fritz!Box, charging cradle |
+| `tests/test_hybrid.py` | Hybrid routing, emergency call, second call, power saving |
+| `cad/omafon_masse.scad` | Shared dimensions of handset/cradle per `variante` (festnetz 30 mm, hybrid 36 mm thick) |
+| `cad/omafon_gehaeuse.scad` | Handset housing: pruefstueck, deckel (with switch plate), wanne, tastengitter, akkudeckel, notrufklappe, lautstaerke_*, hoererkopf, hoermuschel; STL in print orientation |
+| `cad/omafon_ladeschale.scad` | Charging cradle with speaker, spring contacts, coding rib |
+| `docs/druckteile.md` | Parts list, print settings, purchased parts, assembly (also shipped in the STL package) |
+| `config.festnetz.example.yaml`, `config.hybrid.example.yaml` | Example configurations (placeholders only) |
+| `docs/stueckliste.md`, `docs/verkabelung.md` | Bill of materials with prices, wiring/pin assignment of both variants |
+| `cad/omafon_tasten.scad` | Key caps and key front, parametric |
+| `systemd/omafon.service` | Service with watchdog |
 
-## Befehle
+## Commands
 
 ```bash
-pip install -r requirements-dev.txt                       # nur PyYAML
-python3 -m unittest discover -s tests -v                  # Tests
-python3 -m omafon.main --config config.festnetz.example.yaml --sim  # Festnetz-Simulator (Daten in ./sim-data)
-python3 -m omafon.main --config config.hybrid.example.yaml --sim    # Hybrid-Simulator
-python3 -m tools.prerender /etc/omafon/config.yaml        # Ansagen vorab rendern (Pi)
+pip install -r requirements-dev.txt                       # PyYAML only
+python3 -m unittest discover -s tests -v                  # tests
+python3 -m omafon.main --config config.festnetz.example.yaml --sim  # landline simulator (data in ./sim-data)
+python3 -m omafon.main --config config.hybrid.example.yaml --sim    # hybrid simulator
+python3 -m tools.prerender /etc/omafon/config.yaml        # pre-render announcements (Pi)
 openscad -D 'teil="ziffer"' -D 'ziffer="5"' -o taste_5.stl cad/omafon_tasten.scad
 openscad -D 'teil="ziffer"' -D 'ziffer="5"' -D 'farbteil="zeichen"' -o taste_5_zeichen.stl cad/omafon_tasten.scad
 openscad -D 'variante="hybrid"' -D 'teil="wanne"' -o wanne.stl cad/omafon_gehaeuse.scad
 ```
 
-Im Simulator: Tasten `0-9 * #`, `a` Anrufen, `h` Auflegen, `m` Nachricht, `i` Info,
-`L<taste>` lang drücken, `sos` Notruf; Netz: `!ring <nr>`, `!sms <nr> <text>`, `!sag <text>`.
+In the simulator: keys `0-9 * #`, `a` call, `h` hang up, `m` message, `i` info,
+`L<key>` long press, `sos` emergency call; network: `!ring <no>`, `!sms <no> <text>`, `!sag <text>`.
 
-## Regeln
+## Rules
 
-1. **Tastendruck → Ansage muss sofort kommen.** Ziffern werden schon beim
-   `down`-Ereignis angesagt. Event-Handler blockieren nie; lange Abläufe laufen als
-   Job (`start_job`), kurze Ansagen über `speak()`. Keine Synthese, kein I/O und kein
-   `await` auf langsame Dinge im Weg zwischen Tastendruck und Ansage.
-2. **Notruf darf nie von I²C abhängen.** SOS-Knopf und Klappe hängen direkt an
-   Pi-GPIOs (`PI_INPUTS`) und werden auch abgefragt, wenn der MCP23017 ausfällt.
-   Ein ausgefallener Verstärker (TPA2016) darf den Notruf nicht verhindern.
-3. **Ansagetexte nur im `P`-Dict in `omafon/phone.py` ändern** und danach
-   `tools/prerender.py` neu laufen lassen, sonst fehlen die WAVs im Cache und die
-   Ansage kommt verzögert.
-4. Tests müssen ohne Hardware laufen: Hardware-Bibliotheken (`serial`, `smbus2`,
-   `gpiozero`, `vosk`) nur lokal in Funktionen importieren.
-5. **Nachrichten nie automatisch vorlesen.** Neue SMS nur per Gong (wiederholt alle
-   `news_signal_minutes`) und blinkender LED ankündigen; vorgelesen wird erst auf
-   Tastendruck. Kein Gong im Gespräch, in Menüs oder in der Ruhezeit.
-6. **Tasten gut lesbar halten:** Zeichen immer in Kontrastfarbe zur Kappe
-   (`FARBEN` in der SCAD-Datei), Kappe und Zeichen als getrennte Körper (`farbteil`).
-   **Maße von Handteil und Ladeschale nur in `cad/omafon_masse.scad`** ändern, sonst
-   passt das Telefon nicht mehr in die Schale. CAD-Teile müssen ohne OpenSCAD-Warnung
-   rendern (CI bricht sonst ab), STL-Ausgabe immer in Druckrichtung ohne Stützen.
-   Schalterplatten 1,6 mm (8 Lagen à 0,2 mm), Taster-Ausschnitt 14,1 mm, Spiel 0,3 mm.
-   **Ohr vor Tasten:** Hörerkopf + Muschel müssen höher stehen als jede Tastenkappe,
-   und im Gespräch legt die Auflegetaste nur gehalten auf (`hangup_hold_s`) – sonst
-   legt die Wange auf.
-7. **Phone spricht nur über `TelephonyBackend`.** Neue Netzfunktionen als Methode/
-   Ereignis im Backend, nie Backend-Sonderfälle in `phone.py`. Optionale Fähigkeiten
-   (`supports_sms`, `online`, `status_words`) haben sichere Standardwerte.
-8. **Festnetz: Verbindung weg ist nie stumm.** `link_lost` wird angesagt und wiederholt;
-   Wählen ohne Verbindung sagt das sofort. Das Backend baut selbst wieder auf.
-9. **Anrufernamen nur aus Kontakten und dem Fritz!Box-Telefonbuch**, nie aus dem
-   SIP-Anzeigenamen (vom Anrufer frei wählbar → Betrugsgefahr).
-10. **Hybrid: Notruf hat immer einen zweiten Weg.** Scheitert ein Weg, sofort den
-    anderen; 110/112 über Mobilfunk auch ohne eigenes Netz. „Kein Netz“ erst, wenn
-    beide Wege fehlen. Zweitanrufe auf dem anderen Weg abweisen, nie anklopfen.
-11. Keine echten Telefonnummern, Standorte oder Zugangsdaten committen.
-   `config.yaml` ist in `.gitignore`; Beispiele gehören in `config.festnetz.example.yaml`
-   bzw. `config.hybrid.example.yaml`, Kennwörter dort nur als `PLATZHALTER_…`.
-12. **Pinbelegung nur gemeinsam ändern:** GPIO-/MCP-Belegung steht in
-   `omafon/hardware.py` und `docs/verkabelung.md` – immer beide anpassen.
+1. **Key press → announcement must come immediately.** Digits are announced on the
+   `down` event already. Event handlers never block; long sequences run as a
+   job (`start_job`), short announcements via `speak()`. No synthesis, no I/O and no
+   `await` on slow things on the path between key press and announcement.
+2. **The emergency call must never depend on I²C.** SOS button and cover are wired
+   directly to Pi GPIOs (`PI_INPUTS`) and are polled even if the MCP23017 fails.
+   A failed amplifier (TPA2016) must not prevent the emergency call.
+3. **Change announcement texts only in the `P` dict in `omafon/phone.py`** (they stay
+   German) and re-run `tools/prerender.py` afterwards, otherwise the WAVs are missing
+   from the cache and the announcement is delayed.
+4. Tests must run without hardware: import hardware libraries (`serial`, `smbus2`,
+   `gpiozero`, `vosk`) only locally inside functions.
+5. **Never read messages aloud automatically.** Announce new SMS only by a gong (repeated
+   every `news_signal_minutes`) and a blinking LED; they are read only on a key press.
+   No gong during a call, in menus or during quiet hours.
+6. **Keep keys easy to read:** symbols always in a contrasting colour to the cap
+   (`FARBEN` in the SCAD file), cap and symbol as separate bodies (`farbteil`).
+   **Change handset and cradle dimensions only in `cad/omafon_masse.scad`**, otherwise
+   the phone no longer fits the cradle. CAD parts must render without OpenSCAD warnings
+   (CI fails otherwise), STL output always in print orientation without supports.
+   Switch plates 1.6 mm (8 layers of 0.2 mm), switch cut-out 14.1 mm, clearance 0.3 mm.
+   **Ear before keys:** the handset head + earcup must stand higher than any key cap,
+   and during a call the hang-up key only hangs up when held (`hangup_hold_s`) – otherwise
+   the cheek hangs up.
+7. **Phone talks only through `TelephonyBackend`.** New network functions as a method/
+   event in the backend, never backend special cases in `phone.py`. Optional capabilities
+   (`supports_sms`, `online`, `status_words`) have safe defaults.
+8. **Landline: a lost connection is never silent.** `link_lost` is announced and repeated;
+   dialling without a connection says so immediately. The backend reconnects by itself.
+9. **Caller names only from contacts and the Fritz!Box phone book**, never from the
+   SIP display name (freely chosen by the caller → fraud risk).
+10. **Hybrid: the emergency call always has a second path.** If one path fails, try the
+    other immediately; 110/112 via cellular even without own network. "No network" only
+    when both paths are missing. Reject second calls on the other path, never call waiting.
+11. Never commit real phone numbers, locations or credentials.
+   `config.yaml` is in `.gitignore`; examples belong in `config.festnetz.example.yaml`
+   or `config.hybrid.example.yaml`, passwords there only as `PLATZHALTER_…`.
+12. **Change the pin assignment only together:** the GPIO/MCP assignment is in
+   `omafon/hardware.py` and `docs/verkabelung.md` (+ `verkabelung.de.md`) – always update all of them.

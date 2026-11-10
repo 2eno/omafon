@@ -1,9 +1,9 @@
-# Laufzeit-Abhängigkeiten auf dem Raspberry Pi.
-# Auf dem Pi bevorzugt per apt installieren (siehe README), vosk per pip.
+# Runtime dependencies on the Raspberry Pi.
+# On the Pi, preferably install them with apt (see README), vosk with pip.
 pyyaml>=6.0
 pyserial>=3.5
 smbus2>=0.4
 gpiozero>=2.0
 vosk>=0.3.45
-# Nur Festnetz-Variante (backend: sip); baresip selbst per apt: sudo apt install baresip ffmpeg
+# Landline variant only (backend: sip); baresip itself via apt: sudo apt install baresip ffmpeg
 fritzconnection>=1.13

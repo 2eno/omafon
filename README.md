@@ -1,177 +1,185 @@
-# Omafon – Software
+# Omafon – software
+
+*English · [Deutsch](README.de.md)*
 
 [![CI](https://github.com/2eno/omafon/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/2eno/omafon/actions/workflows/ci.yml)
 ![Python 3.11 | 3.13](https://img.shields.io/badge/python-3.11%20%7C%203.13-blue)
-[![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-green)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-Sprechendes Telefon für Menschen mit starker Sehbehinderung.
-Raspberry Pi Zero 2 W, Python 3 (asyncio), zwei Varianten:
+A talking phone for people with severe visual impairment. The phone speaks German.
+Raspberry Pi Zero 2 W, Python 3 (asyncio), two variants:
 
-| Variante | `backend:` | Netz | Hardware |
+| Variant | `backend:` | Network | Hardware |
 |---|---|---|---|
-| Festnetz | `sip` | Fritz!Box per WLAN (IP-Telefon), Anrufbeantworter, Telefonbuch | Handteil 30 mm, Ladeschale mit Lautsprecher |
-| Hybrid | `hybrid` | zu Hause Fritz!Box, unterwegs LTE mit SMS und GPS – automatisch | zusätzlich SIM7600E-H-HAT, Handteil 36 mm ([docs/hybrid.md](docs/hybrid.md)) |
+| Landline | `sip` | Fritz!Box via Wi-Fi (IP phone), answering machine, phone book | handset 30 mm, cradle with speaker |
+| Hybrid | `hybrid` | Fritz!Box at home, LTE with SMS and GPS on the go – automatically | additional SIM7600E-H HAT, handset 36 mm ([docs/hybrid.md](docs/hybrid.md)) |
 
-- **Stückliste:** [docs/stueckliste.md](docs/stueckliste.md)
-- **Verkabelung:** [docs/verkabelung.md](docs/verkabelung.md)
-- **Druckteile und Zusammenbau:** [docs/druckteile.md](docs/druckteile.md)
-- Hintergrund: [Festnetz-Recherche](docs/festnetz-recherche.md),
-  [Festnetz-Hardware und Strombilanz](docs/festnetz-hardware.md)
+- **Bill of materials:** [docs/stueckliste.md](docs/stueckliste.md)
+- **Wiring:** [docs/verkabelung.md](docs/verkabelung.md)
+- **Printed parts and assembly:** [docs/druckteile.md](docs/druckteile.md)
+- Background: [landline research](docs/festnetz-recherche.md),
+  [landline hardware and power budget](docs/festnetz-hardware.md)
 
-![Tastenfeld: weiße Ziffernkappen mit schwarzen erhabenen Ziffern auf dunkler Front, gelbe Anruftaste, schwarze Auflegetaste mit weißem Balken, breite Info-Taste](cad/tastenfeld_vorschau.png)
+All documents are also available in German (`*.de.md`).
 
-*Vorschau mit Ersatzschrift Liberation Sans; vorgesehen ist Atkinson Hyperlegible.*
+![Keypad: white digit caps with raised black digits on a dark front, yellow call key, black hang-up key with a white bar, wide info key](cad/tastenfeld_vorschau.png)
 
-| Handteil vorn | Handteil hinten | Ladeschale |
+*Preview with the fallback font Liberation Sans; Atkinson Hyperlegible is intended.*
+
+| Handset front | Handset back | Cradle |
 |---|---|---|
-| ![Handteil von vorn mit Tastenkappen, Hörer oben, Mikrofon und Ladekontakten unten](cad/gehaeuse_vorschau_vorn.png) | ![Rückseite mit roter Notrufklappe, Akkudeckel, Lautsprechergitter und Kodiernut](cad/gehaeuse_vorschau_hinten.png) | ![Ladeschale mit eingestecktem Handteil (angedeutet) und Lautsprechergrill dahinter](cad/ladeschale_vorschau.png) |
+| ![Handset from the front with key caps, earpiece at the top, microphone and charging contacts at the bottom](cad/gehaeuse_vorschau_vorn.png) | ![Back with red emergency cover, battery cover, speaker grille and coding groove](cad/gehaeuse_vorschau_hinten.png) | ![Cradle with the handset inserted (indicated) and the speaker grille behind it](cad/ladeschale_vorschau.png) |
 
 ## Status
 
-**Software im Simulator getestet, Hardware ungetestet.**
+**Software tested in the simulator, hardware untested.**
 
-- Alle Tests laufen ohne Hardware (siehe CI); der PC-Simulator (`--sim`) deckt
-  Wählen, Anrufe, SMS, Sprachwahl, Diktat und Notruf ab.
-- Modem, Tastenmatrix, Verstärker, Akku-Messung und Gehäuseteile sind noch
-  nicht an echter Hardware erprobt.
-- **Komplettes Druckpaket:** Die CI erzeugt bei jedem Push alle STL-Dateien
-  (Artefakt `omafon-stl`). Darin sind Tastenkappen ein- und zweifarbig, das Gehäuse
-  und die Ladeschale je Variante sowie die Druck- und Montageanleitung
-  ([docs/druckteile.md](docs/druckteile.md)). Gedruckt ist davon noch nichts.
+- All tests run without hardware (see CI); the PC simulator (`--sim`) covers dialing,
+  calls, SMS, voice dialing, dictation and emergency calls.
+- Modem, key matrix, amplifier, battery gauge and housing parts have not yet been
+  tried on real hardware.
+- **Complete print package:** on every push, CI produces all STL files (artifact
+  `omafon-stl`). It contains single- and two-color key caps, the housing and the cradle
+  per variant, and the print and assembly guide
+  ([docs/druckteile.md](docs/druckteile.md)). None of it has been printed yet.
 
-## Neue Nachrichten
+## New messages
 
-SMS werden **nicht automatisch vorgelesen**. Eine neue Nachricht wird mit einem
-Gong angekündigt, der sich alle `news_signal_minutes` (Standard 10) wiederholt,
-solange etwas ungelesen ist; zusätzlich blinkt die LED langsam (`news_led`).
-Während eines Gesprächs oder in der Ruhezeit (`quiet_hours`) gibt es keinen
-Gong, nachts nur die LED. Vorgelesen wird erst mit der Nachricht-Taste.
+SMS are **not read aloud automatically**. A new message is announced with a gong that
+repeats every `news_signal_minutes` (default 10) as long as something is unread; in
+addition the LED blinks slowly (`news_led`). During a call or in the quiet hours
+(`quiet_hours`) there is no gong, at night only the LED. Messages are read aloud only
+when the message key is pressed.
 
-## Tasten
+## Keys
 
-Die Kappen sind zweifarbig ausgelegt: Zeichen immer kontrastreich zur Kappe
-(Schwarz auf Weiß, Schwarz auf Gelb, Weiß auf Schwarz/Rot). Farben stehen in
-`FARBEN` in `cad/omafon_tasten.scad`, Export getrennt mit `-D 'farbteil="kappe"'`
-bzw. `-D 'farbteil="zeichen"'`.
+The caps are designed for two colors: symbols always in a contrasting color to the cap
+(black on white, black on yellow, white on black/red). The colors are in `FARBEN` in
+`cad/omafon_tasten.scad`; export them separately with `-D 'farbteil="kappe"'` and
+`-D 'farbteil="zeichen"'`.
 
 ```
 omafon/
-  main.py       Start, Watchdog, PC-Simulator (--sim)
-  phone.py      Zustandsautomat: Wählen, Anrufe, SMS, Diktat, Notruf
-  telephony.py  Schnittstelle TelephonyBackend + Auswahl über config.yaml
-  modem.py      Mobilfunkteil des Hybrids: AT-Treiber SIM7600 (+ SimModem)
-  sip.py        Backend sip: baresip über ctrl_tcp, Fritz!Box, Verbindungsüberwachung
-  sipsim.py     nachgebautes baresip + Fritz!Box für Tests und --sim
-  hybrid.py     Backend hybrid: Fritz!Box + Mobilfunk, Routing, Sparmodus
-  fritz.py      TR-064: Telefonbuch, Anrufbeantworter
-  notify.py     Telegram/E-Mail statt SMS (Festnetz, optional)
-  pdu.py        SMS im PDU-Modus: Umlaute, Emojis, lange SMS
-  audio.py      Piper-Sprachausgabe mit Cache, Töne, TPA2016-Verstärker
-  stt.py        Vosk-Spracherkennung (Namen + Diktat), optional Whisper-Server
-  hardware.py   Tasten (MCP23017 + GPIO), Entprellung, Akku, Vibration
-  numbers.py    "zwo" statt "zwei", Nummern in Gruppen, Uhrzeit
-tools/prerender.py   feste Ansagen vorab erzeugen
-cad/omafon_masse.scad      gemeinsame Maße Handteil/Ladeschale, Variante
-cad/omafon_gehaeuse.scad   Handteil: Prüfstück, Deckel mit Schalterplatte, Wanne, Hörerkopf, Akkudeckel, Notrufklappe …
-cad/omafon_tasten.scad     Tastenkappen und Tastenfront (OpenSCAD)
-cad/omafon_ladeschale.scad Ladeschale mit Lautsprecher
+  main.py       start, watchdog, PC simulator (--sim)
+  phone.py      state machine: dialing, calls, SMS, dictation, emergency call
+  telephony.py  TelephonyBackend interface + selection via config.yaml
+  modem.py      mobile part of the hybrid: AT driver SIM7600 (+ SimModem)
+  sip.py        backend sip: baresip via ctrl_tcp, Fritz!Box, connection monitoring
+  sipsim.py     rebuilt baresip + Fritz!Box for tests and --sim
+  hybrid.py     backend hybrid: Fritz!Box + mobile, routing, power saving
+  fritz.py      TR-064: phone book, answering machine
+  notify.py     Telegram/e-mail instead of SMS (landline, optional)
+  pdu.py        SMS in PDU mode: umlauts, emojis, long SMS
+  audio.py      Piper speech output with cache, tones, TPA2016 amplifier
+  stt.py        Vosk speech recognition (names + dictation), optional Whisper server
+  hardware.py   keys (MCP23017 + GPIO), debouncing, battery, vibration
+  numbers.py    "zwo" instead of "zwei", numbers in groups, time
+tools/prerender.py   pre-render the fixed announcements
+cad/omafon_masse.scad      shared dimensions handset/cradle, variant
+cad/omafon_gehaeuse.scad   handset: test piece, top with switch plate, bottom shell, head part, battery cover, emergency cover …
+cad/omafon_tasten.scad     key caps and key front (OpenSCAD)
+cad/omafon_ladeschale.scad cradle with speaker
 systemd/omafon.service
-tests/test_omafon.py       26 Tests (Kern, Tasten, SMS, Notruf, Pinbelegung), ohne Hardware
-tests/test_festnetz.py     30 Tests (SIP-Backend, Fritz!Box, Ladeschale), ohne Hardware
-tests/test_hybrid.py       15 Tests (Routing, Notruf, Zweitanruf, Sparmodus), ohne Hardware
-docs/                      Stückliste, Verkabelung, Festnetz-Recherche und -Hardware
+tests/test_omafon.py       26 tests (core, keys, SMS, emergency, pin assignment), without hardware
+tests/test_festnetz.py     30 tests (SIP backend, Fritz!Box, cradle), without hardware
+tests/test_hybrid.py       15 tests (routing, emergency, second call, power saving), without hardware
+docs/                      bill of materials, wiring, landline research and hardware
 ```
 
-## Am PC ausprobieren (ohne Hardware)
+## Trying it on a PC (without hardware)
 
 ```bash
-pip install -r requirements-dev.txt     # nur PyYAML
+pip install -r requirements-dev.txt     # only PyYAML
 python3 -m unittest discover -s tests -v
 python3 -m omafon.main --config config.festnetz.example.yaml --sim
 ```
 
-Im Simulator tippst du Tasten (`0171`, `a` = Anrufen, `h` = Auflegen, `Lh` = Auflegen
-lang/gehalten, `Lm` = Nachricht lang) und Netzereignisse (`!ring +491711234567`,
-`!sag maria`). Das Festnetz-Backend läuft dabei echt gegen ein nachgebautes baresip:
-`!sms <nr>` legt `!sms <nr>` eine Nachricht auf den Anrufbeantworter, `!wlan aus` / `!wlan an`
-trennt die Fritz!Box (nach 10 s kommt „Keine Verbindung zur Fritzbox“),
-`lade` / `ab` stellt das Telefon in die Schale bzw. hebt es ab.
+In the simulator you type keys (`0171`, `a` = call, `h` = hang up, `Lh` = hang up
+long/held, `Lm` = message long) and network events (`!ring +491711234567`,
+`!sag maria`). The landline backend runs for real against a rebuilt baresip:
+`!sms <nr>` puts a message on the answering machine, `!wlan aus` / `!wlan an`
+disconnects the Fritz!Box (after 10 s you hear „Keine Verbindung zur Fritzbox“),
+`lade` / `ab` puts the phone into the cradle or lifts it.
 
-Hybridgerät im Simulator: `--config config.hybrid.example.yaml --sim`, zusätzlich
-`!mring <nr>` (Anruf auf die Handynummer), `!ab <nr>` (Anrufbeantworter),
-`!netz aus` / `!netz an` (Funkloch). Bedienung und Regeln: [docs/hybrid.md](docs/hybrid.md).
+Hybrid device in the simulator: `--config config.hybrid.example.yaml --sim`, plus
+`!mring <nr>` (call to the mobile number), `!ab <nr>` (answering machine),
+`!netz aus` / `!netz an` (dead zone). Usage and rules: [docs/hybrid.md](docs/hybrid.md).
 
-## Festnetz auf dem Pi (zusätzlich zur Installation unten)
+## Landline on the Pi (in addition to the installation below)
 
 ```bash
 sudo apt install baresip ffmpeg python3-fritzconnection
 ```
 
-Fritz!Box einrichten wie in [docs/festnetz-recherche.md](docs/festnetz-recherche.md#7-was-in-der-fritzbox-einzurichten-ist)
-beschrieben, dann `config.festnetz.example.yaml` nach `/etc/omafon/config.yaml`
-kopieren und die Platzhalter ersetzen. Omafon startet baresip selbst.
+Set up the Fritz!Box as described in
+[docs/festnetz-recherche.md](docs/festnetz-recherche.md#7-what-to-set-up-in-the-fritzbox),
+then copy `config.festnetz.example.yaml` to `/etc/omafon/config.yaml` and replace the
+placeholders. Omafon starts baresip itself.
 
-## Hybrid: erster Test am Modem – VOR dem Gehäusebau
+## Hybrid: first test on the modem – BEFORE building the housing
 
 ```bash
 sudo apt install minicom
 minicom -D /dev/ttyAMA0 -b 115200
-AT+CPIN?            # SIM bereit?
-AT+CSQ              # Empfang (10–31 gut)
-AT+CNMP=38          # nur LTE erzwingen
-ATD<eigene Handynummer>;   # klingelt es und hört man sich? -> VoLTE läuft
+AT+CPIN?            # SIM ready?
+AT+CSQ              # reception (10–31 good)
+AT+CNMP=38          # force LTE only
+ATD<own mobile number>;   # does it ring and can you hear yourself? -> VoLTE works
 AT+CHUP
-AT+CNMP=2           # zurück auf automatisch
+AT+CNMP=2           # back to automatic
 ```
 
-Klappt der Anruf im LTE-only-Modus nicht, funktioniert das Telefon nur bis zur
-2G-Abschaltung (Mitte/Ende 2028). Dann: anderen Anbieter testen, Modul-Firmware
-aktualisieren oder beim SIMCom-Support nach dem passenden VoLTE-Profil fragen.
+If the call doesn’t work in LTE-only mode, the phone will only work until 2G is switched
+off (mid/late 2028). Then: test another provider, update the module firmware, or ask
+SIMCom support for the right VoLTE profile.
 
-## Installation auf dem Pi
+## Installation on the Pi
 
-1. **Raspberry Pi OS Lite 64 Bit** flashen. `raspi-config`: I²C an, serielle
-   Schnittstelle an, Login-Konsole darauf aus.
-2. `/boot/firmware/config.txt` ergänzen:
+1. Flash **Raspberry Pi OS Lite 64-bit**. `raspi-config`: I²C on, serial port on, login
+   console on it off.
+2. Add to `/boot/firmware/config.txt`:
    ```
    enable_uart=1
    dtoverlay=disable-bt
    dtparam=watchdog=on
    ```
-   In `/etc/systemd/system.conf`: `RuntimeWatchdogSec=15` (Hardware-Watchdog).
-3. Pakete:
+   In `/etc/systemd/system.conf`: `RuntimeWatchdogSec=15` (hardware watchdog).
+3. Packages:
    ```bash
    sudo apt install python3-serial python3-smbus2 python3-gpiozero python3-yaml \
                     alsa-utils espeak-ng
    sudo pip install --break-system-packages vosk
    ```
-4. **Piper** (Sprachausgabe): Release `piper_linux_aarch64.tar.gz` aus dem
-   Projekt rhasspy/piper nach `/opt/omafon/piper/` entpacken. Stimme
-   `de_DE-thorsten-medium` (oder `-low`, schneller) aus `rhasspy/piper-voices` nach
-   `/opt/omafon/voices/`. Probiere auch die Frauenstimmen `kerstin` und `ramona` –
-   Oma entscheidet. *Hinweis:* Piper wird inzwischen als `piper1-gpl` weiterentwickelt;
-   dessen Kommandozeile hat andere Optionen – dann `Audio.synth()` anpassen.
-5. **Vosk-Modell** `vosk-model-small-de-0.15` nach `/opt/omafon/` entpacken.
-6. Code nach `/opt/omafon`, Konfiguration nach `/etc/omafon/config.yaml`, Benutzer
-   `omafon` anlegen (Gruppen audio, dialout, gpio, i2c), Datenpartition `/data`.
-7. `sudo python3 -m tools.prerender /etc/omafon/config.yaml` – erzeugt alle festen Ansagen.
+4. **Piper** (speech output): unpack the release `piper_linux_aarch64.tar.gz` from the
+   rhasspy/piper project to `/opt/omafon/piper/`. Put the voice `de_DE-thorsten-medium`
+   (or `-low`, faster) from `rhasspy/piper-voices` into `/opt/omafon/voices/`. Also try
+   the female voices `kerstin` and `ramona` – grandma decides. *Note:* Piper is now
+   developed further as `piper1-gpl`; its command line has different options – then
+   adjust `Audio.synth()`.
+5. Unpack the **Vosk model** `vosk-model-small-de-0.15` to `/opt/omafon/`.
+6. Code to `/opt/omafon`, configuration to `/etc/omafon/config.yaml`, create the user
+   `omafon` (groups audio, dialout, gpio, i2c), data partition `/data`.
+7. `sudo python3 -m tools.prerender /etc/omafon/config.yaml` – generates all fixed
+   announcements.
 8. `sudo cp systemd/omafon.service /etc/systemd/system/ && sudo systemctl enable --now omafon`
-9. Zum Schluss `raspi-config` → Performance → **Overlay File System** an. Das System
-   ist dann schreibgeschützt und übersteht Stromausfälle. Nur `/data` bleibt beschreibbar.
+9. Finally `raspi-config` → Performance → **Overlay File System** on. The system is then
+   read-only and survives power cuts. Only `/data` stays writable.
 
-## Namen für die Sprachwahl
+## Names for voice dialing
 
-Vosk erkennt nur Wörter aus seinem Wortschatz. Exotische Namen ("Zeno") fehlen
-oft. Darum hat jeder Kontakt `spoken:` – dort Wörter eintragen, die Oma ohnehin
-sagt: `sohn`, `tochter`, `enkel`, `doktor`. Mit `!sag` im Simulator testen,
-auf dem Pi mit einem kurzen Python-Aufruf von `Recognizer.listen_name()`.
+Vosk only recognizes words from its vocabulary. Unusual names (“Zeno”) are often
+missing. That’s why every contact has `spoken:` – enter words there that grandma says
+anyway: `sohn`, `tochter`, `enkel`, `doktor` (son, daughter, grandchild, doctor). Test
+with `!sag` in the simulator, on the Pi with a short Python call of
+`Recognizer.listen_name()`.
 
-## Was noch fehlt / bewusst offen
+## What’s still missing / deliberately open
 
-- Bestätigung "Taste 1 drücken" beim Notruf-Empfänger (DTMF-Erkennung prüfen).
-- Echte Lastmessung für die Akkulaufzeit.
-- TPA2016-Registerwerte am echten Chip prüfen (Kommentar in `audio.py`).
+- Confirmation “press key 1” for the recipient of an emergency call (check DTMF
+  detection).
+- A real load measurement for the battery life.
+- Check the TPA2016 register values on the real chip (comment in `audio.py`).
 
-## Lizenz
+## License
 
-MIT – siehe [LICENSE](LICENSE).
+MIT – see [LICENSE](LICENSE).

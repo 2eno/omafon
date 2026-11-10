@@ -1,19 +1,19 @@
-"""SMS-PDU-Kodierung nach 3GPP TS 23.040 / 23.038.
+"""SMS PDU encoding per 3GPP TS 23.040 / 23.038.
 
-Nur was ein Telefon braucht:
-  * SMS-DELIVER dekodieren (GSM-7, UCS-2, 8 Bit, mehrteilige SMS über UDH)
-  * SMS-SUBMIT erzeugen (automatisch GSM-7 oder UCS-2, mehrteilig wenn nötig)
-  * build_deliver() erzeugt DELIVER-PDUs für Simulation und Tests
+Only what a phone needs:
+  * decode SMS-DELIVER (GSM-7, UCS-2, 8 bit, multipart SMS via UDH)
+  * build SMS-SUBMIT (GSM-7 or UCS-2 automatically, multipart if needed)
+  * build_deliver() creates DELIVER PDUs for simulation and tests
 
-PDU-Modus statt Textmodus, weil Umlaute, Emojis und lange SMS im Textmodus
-der SIMCom-Module je nach Firmware unzuverlässig sind.
+PDU mode instead of text mode, because umlauts, emojis and long SMS are
+unreliable in the text mode of SIMCom modules, depending on the firmware.
 """
 from __future__ import annotations
 
 import datetime as _dt
 from dataclasses import dataclass, field
 
-# Grundtabelle GSM 03.38 (128 Zeichen, Index = Septett-Wert). 0x1B = Escape.
+# basic table GSM 03.38 (128 characters, index = septet value). 0x1B = escape.
 GSM7_BASIC = (
     "@£$¥èéùìòÇ\nØø\rÅå"
     "Δ_ΦΓΛΩΠΨΣΘΞ\x1bÆæßÉ"
@@ -33,7 +33,7 @@ _BASIC_REV = {ch: i for i, ch in enumerate(GSM7_BASIC) if i != 0x1B}
 _EXT_REV = {ch: code for code, ch in GSM7_EXT.items()}
 
 
-# --------------------------------------------------------------- Septette
+# --------------------------------------------------------------- Septets
 def pack7(septets: list[int]) -> bytes:
     out, acc, bits = bytearray(), 0, 0
     for s in septets:
@@ -61,7 +61,7 @@ def unpack7(data: bytes, count: int) -> list[int]:
 
 
 def gsm7_encode(text: str) -> list[int] | None:
-    """Text -> Septette, oder None wenn ein Zeichen nicht in GSM-7 passt."""
+    """Text -> septets, or None if a character does not fit into GSM-7."""
     out: list[int] = []
     for ch in text:
         if ch in _BASIC_REV:
@@ -87,11 +87,11 @@ def gsm7_decode(septets: list[int]) -> str:
 
 
 def _header_septets(udh_len: int) -> int:
-    """Anzahl Septette, die ein UDH (inkl. Längenbyte) samt Füllbits belegt."""
+    """Number of septets a UDH (incl. length byte) occupies including fill bits."""
     return ((udh_len) * 8 + 6) // 7
 
 
-# --------------------------------------------------------------- Adressen
+# --------------------------------------------------------------- Addresses
 def _bcd_swap(digits: str) -> bytes:
     if len(digits) % 2:
         digits += "F"
@@ -114,7 +114,7 @@ def decode_address(data: bytes, pos: int) -> tuple[str, int]:
     ndigits, toa = data[pos], data[pos + 1]
     nbytes = (ndigits + 1) // 2
     raw = data[pos + 2: pos + 2 + nbytes]
-    if (toa >> 4) & 0x07 == 0x05:  # alphanumerisch, z. B. "Telekom"
+    if (toa >> 4) & 0x07 == 0x05:  # alphanumeric, e.g. "Telekom"
         addr = gsm7_decode(unpack7(raw, ndigits * 4 // 7))
     else:
         addr = _bcd_unswap(raw, ndigits)
@@ -137,7 +137,7 @@ class Deliver:
     sender: str
     text: str
     timestamp: _dt.datetime | None = None
-    concat_ref: int | None = None   # Referenz mehrteiliger SMS
+    concat_ref: int | None = None   # reference of multipart SMS
     concat_total: int = 1
     concat_seq: int = 1
     raw: str = field(default="", repr=False)
@@ -154,9 +154,9 @@ def _alphabet(dcs: int) -> str:
 
 
 def decode_deliver(pdu_hex: str) -> Deliver:
-    """Dekodiert eine PDU, wie sie AT+CMGR im PDU-Modus liefert (mit SMSC-Teil)."""
+    """Decodes a PDU as returned by AT+CMGR in PDU mode (with the SMSC part)."""
     data = bytes.fromhex(pdu_hex.strip())
-    pos = 1 + data[0]                 # SMSC-Information überspringen
+    pos = 1 + data[0]                 # skip the SMSC information
     first = data[pos]
     pos += 1
     if first & 0x03 != 0x00:
@@ -198,15 +198,15 @@ def decode_deliver(pdu_hex: str) -> Deliver:
 # --------------------------------------------------------------- SUBMIT
 @dataclass
 class Submit:
-    pdu_hex: str      # mit vorangestelltem "00" (Standard-SMSC der SIM)
-    tpdu_len: int     # Wert für AT+CMGS=<len>
+    pdu_hex: str      # prefixed with "00" (default SMSC of the SIM)
+    tpdu_len: int     # value for AT+CMGS=<len>
 
 
 def _split_gsm7(septets: list[int], size: int) -> list[list[int]]:
     parts, cur = [], []
     i = 0
     while i < len(septets):
-        step = 2 if septets[i] == 0x1B else 1      # Escape-Paar nie trennen
+        step = 2 if septets[i] == 0x1B else 1      # never split an escape pair
         if len(cur) + step > size:
             parts.append(cur)
             cur = []
@@ -220,7 +220,7 @@ def _split_gsm7(septets: list[int], size: int) -> list[list[int]]:
 def _split_ucs2(text: str, size_units: int) -> list[str]:
     parts, cur, units = [], "", 0
     for ch in text:
-        u = 2 if ord(ch) > 0xFFFF else 1           # Surrogatpaare nie trennen
+        u = 2 if ord(ch) > 0xFFFF else 1           # never split surrogate pairs
         if units + u > size_units:
             parts.append(cur)
             cur, units = "", 0
@@ -232,7 +232,7 @@ def _split_ucs2(text: str, size_units: int) -> list[str]:
 
 
 def encode_submit(number: str, text: str, ref: int = 0) -> list[Submit]:
-    """Erzeugt eine oder mehrere SUBMIT-PDUs. ref = Referenz 0..255."""
+    """Builds one or more SUBMIT PDUs. ref = reference 0..255."""
     da = encode_address(number)
     septets = gsm7_encode(text)
     if septets is not None:
@@ -255,16 +255,16 @@ def encode_submit(number: str, text: str, ref: int = 0) -> list[Submit]:
         else:
             ud = bytearray(udh + chunk.encode("utf-16-be"))
             udl = len(ud)
-        first = 0x11 | (0x40 if udh else 0)   # SUBMIT, Gültigkeit relativ, ggf. UDHI
+        first = 0x11 | (0x40 if udh else 0)   # SUBMIT, relative validity, UDHI if needed
         tpdu = bytes([first, 0x00]) + da + bytes([0x00, dcs, 0xAA, udl]) + bytes(ud)
         out.append(Submit("00" + tpdu.hex().upper(), len(tpdu)))
     return out
 
 
-# --------------------------------------------------------------- nur Simulation/Test
+# --------------------------------------------------------------- simulation/test only
 def build_deliver(sender: str, text: str, when: _dt.datetime | None = None,
                   ref: int = 7) -> list[str]:
-    """Baut DELIVER-PDUs (wie vom Netz empfangen). Für Simulator und Tests."""
+    """Builds DELIVER PDUs (as received from the network). For the simulator and tests."""
     when = when or _dt.datetime(2026, 11, 1, 18, 0, 0)
     scts = _bcd_swap(when.strftime("%y%m%d%H%M%S")) + b"\x00"
     oa = encode_address(sender)
@@ -276,7 +276,7 @@ def build_deliver(sender: str, text: str, when: _dt.datetime | None = None,
         da_len = 2 + (t[2] + 1) // 2
         pos = 2 + da_len
         dcs = t[pos + 1]
-        rest = t[pos + 3:]                       # UDL + UD (VP übersprungen)
+        rest = t[pos + 3:]                       # UDL + UD (VP skipped)
         tpdu = bytes([0x04 | udhi]) + oa + bytes([0x00, dcs]) + scts + rest
         out.append("00" + tpdu.hex().upper())
     return out

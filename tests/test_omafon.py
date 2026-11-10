@@ -1,4 +1,4 @@
-"""Tests ohne Hardware:  python3 -m unittest discover -s tests -v"""
+"""Tests without hardware:  python3 -m unittest discover -s tests -v"""
 import asyncio
 import datetime as dt
 import sys
@@ -16,13 +16,13 @@ from omafon.numbers import normalize, spoken_number
 from omafon.phone import P, S, Phone
 from omafon.stt import SimRecognizer
 
-# Kernlogik mit dem SIM7600-Simulator (Mobilfunkteil des Hybridgeräts)
+# core logic with the SIM7600 simulator (mobile part of the hybrid device)
 CFG = Path(__file__).resolve().parents[1] / "config.hybrid.example.yaml"
 
 
 class PduTests(unittest.TestCase):
     def test_classic_example(self):
-        # Bekanntes Beispiel aus der GSM-Literatur: "hellohello"
+        # well-known example from the GSM literature: "hellohello"
         d = pdu.decode_deliver("07917283010010F5040BC87238880900F10000993092516195800AE8329BFD4697D9EC37")
         self.assertEqual(d.text, "hellohello")
         self.assertEqual(d.sender, "27838890001")
@@ -42,12 +42,12 @@ class PduTests(unittest.TestCase):
         self.assertEqual(pdu.decode_deliver(p).text, text)
 
     def test_long_messages_are_split_and_tagged(self):
-        long7 = "Das ist ein langer Text. " * 20            # 500 Zeichen GSM-7
+        long7 = "Das ist ein langer Text. " * 20            # 500 GSM-7 characters
         parts = [pdu.decode_deliver(p) for p in pdu.build_deliver("+4917012", long7)]
         self.assertEqual(len(parts), 4)
         self.assertEqual("".join(p.text for p in parts), long7)
         self.assertEqual({p.concat_total for p in parts}, {4})
-        longu = "Grüße 😀 " * 30                              # UCS-2, mehrteilig
+        longu = "Grüße 😀 " * 30                              # UCS-2, multipart
         parts = [pdu.decode_deliver(p) for p in pdu.build_deliver("+4917012", longu)]
         self.assertGreater(len(parts), 1)
         self.assertEqual("".join(p.text for p in parts), longu)
@@ -57,8 +57,8 @@ class PduTests(unittest.TestCase):
         self.assertEqual(s.tpdu_len, len(bytes.fromhex(s.pdu_hex)) - 1)
         self.assertEqual(len(pdu.encode_submit("+49171", "x" * 160)), 1)
         self.assertEqual(len(pdu.encode_submit("+49171", "x" * 161)), 2)
-        self.assertEqual(len(pdu.encode_submit("+49171", "ü" * 160)), 1)   # ü ist GSM-7
-        self.assertEqual(len(pdu.encode_submit("+49171", "😀" * 35)), 1)   # 70 UTF-16-Einheiten
+        self.assertEqual(len(pdu.encode_submit("+49171", "ü" * 160)), 1)   # ü is GSM-7
+        self.assertEqual(len(pdu.encode_submit("+49171", "😀" * 35)), 1)   # 70 UTF-16 units
         self.assertEqual(len(pdu.encode_submit("+49171", "😀" * 36)), 2)
 
 
@@ -77,11 +77,11 @@ class KeyTrackerTests(unittest.TestCase):
         evs = []
         kt = KeyTracker(evs.append, long_s=1.2)
         t = 0.0
-        for pressed in (True, False, True, False):        # Prellen innerhalb 30 ms
+        for pressed in (True, False, True, False):        # bouncing within 30 ms
             kt.update("5", pressed, t)
             t += 0.01
         kt.update("5", False, t + 0.2)
-        self.assertEqual(evs, [])                          # nichts ausgelöst
+        self.assertEqual(evs, [])                          # nothing triggered
         kt.update("5", True, 1.0)
         kt.update("5", True, 1.1)
         kt.update("5", False, 1.3)
@@ -96,23 +96,37 @@ class KeyTrackerTests(unittest.TestCase):
 
 
 class WiringDocTests(unittest.TestCase):
-    """docs/verkabelung.md muss zur Pinbelegung in hardware.py passen."""
+    """docs/verkabelung.md (English) and docs/verkabelung.de.md (German) must match
+    the pin assignment in hardware.py."""
+
+    LABELS = {
+        "verkabelung.md": {
+            "keys": {"*": "* (star)", "#": "# (hash)", "CALL": "Call (yellow)",
+                     "HANGUP": "Hang up (black)", "MSG": "Message", "INFO": "Info"},
+            "inputs": {"SOS": "SOS button", "SOS_COVER": "Emergency cover", "VOL_UP": "Volume up",
+                       "VOL_DOWN": "Volume down", "CHARGER": "In the cradle"},
+        },
+        "verkabelung.de.md": {
+            "keys": {"*": "* (Stern)", "#": "# (Raute)", "CALL": "Anrufen (gelb)",
+                     "HANGUP": "Auflegen (schwarz)", "MSG": "Nachricht", "INFO": "Info"},
+            "inputs": {"SOS": "SOS-Taster", "SOS_COVER": "Notrufklappe", "VOL_UP": "Lauter",
+                       "VOL_DOWN": "Leiser", "CHARGER": "In der Schale"},
+        },
+    }
 
     def test_pinout_matches_code(self):
         import re
         from omafon import hardware as h
-        doc = (Path(__file__).resolve().parents[1] / "docs" / "verkabelung.md").read_text(encoding="utf-8")
-        names = {"*": "* (Stern)", "#": "# (Raute)", "CALL": "Anrufen (gelb)",
-                 "HANGUP": "Auflegen (schwarz)", "MSG": "Nachricht", "INFO": "Info"}
-        for bit, key in enumerate(h.MCP_KEYS):
-            pin = ("GPA" if bit < 8 else "GPB") + str(bit % 8)
-            self.assertRegex(doc, rf"\| {pin} \| {bit} \| {re.escape(names.get(key, key))} \|")
-        labels = {"SOS": "SOS-Taster", "SOS_COVER": "Notrufklappe", "VOL_UP": "Lauter",
-                  "VOL_DOWN": "Leiser", "CHARGER": "In der Schale"}
-        for pin, key, _inv in h.PI_INPUTS:
-            self.assertRegex(doc, rf"\| {pin} \| {re.escape(labels[key])} \|")
-        for pin, label in ((h.PIN_VIBRA, "Vibration"), (h.PIN_LED, "LED"), (h.PIN_MODEM_PWR, "Modem PWRKEY")):
-            self.assertRegex(doc, rf"\| {pin} \| {label}")
+        for name, labels in self.LABELS.items():
+            with self.subTest(doc=name):
+                doc = (Path(__file__).resolve().parents[1] / "docs" / name).read_text(encoding="utf-8")
+                for bit, key in enumerate(h.MCP_KEYS):
+                    pin = ("GPA" if bit < 8 else "GPB") + str(bit % 8)
+                    self.assertRegex(doc, rf"\| {pin} \| {bit} \| {re.escape(labels['keys'].get(key, key))} \|")
+                for pin, key, _inv in h.PI_INPUTS:
+                    self.assertRegex(doc, rf"\| {pin} \| {re.escape(labels['inputs'][key])} \|")
+                for pin, label in ((h.PIN_VIBRA, "Vibration"), (h.PIN_LED, "LED"), (h.PIN_MODEM_PWR, "Modem PWRKEY")):
+                    self.assertRegex(doc, rf"\| {pin} \| {label}")
 
 
 class PhoneTests(unittest.IsolatedAsyncioTestCase):
@@ -170,7 +184,7 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
         self.modem.inject("call_begin")
         await self.pump()
         self.assertEqual(self.phone.state, S.IN_CALL)
-        await self.press("HANGUP", held=0.6)               # bewusst gehalten
+        await self.press("HANGUP", held=0.6)               # held on purpose
         self.assertEqual(self.phone.state, S.IDLE)
         self.assertIn("Aufgelegt.", self.said())
 
@@ -179,12 +193,12 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
         await self.pump()
         await self.press("CALL")
         self.assertEqual(self.phone.state, S.IN_CALL)
-        await self.press("HANGUP", held=0.1)               # Wange streift die Taste
+        await self.press("HANGUP", held=0.1)               # the cheek brushes the key
         await self.press("HANGUP", held=0.2)
         self.assertEqual(self.phone.state, S.IN_CALL)
-        self.assertEqual(self.said().count(P["hangup_hold"]), 1)   # Hinweis nur einmal
+        self.assertEqual(self.said().count(P["hangup_hold"]), 1)   # hint only once
         self.assertNotIn("AT+CHUP", self.modem.log)
-        await self.press("HANGUP", long=True)              # lang gedrückt: aufgelegt
+        await self.press("HANGUP", long=True)              # long press: hung up
         self.assertEqual(self.phone.state, S.IDLE)
         self.assertIn("AT+CHUP", self.modem.log)
 
@@ -238,21 +252,21 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
     async def test_sms_is_signalled_not_read(self):
         self.modem.inject_sms("+491609876543", "Ich komme morgen um drei vorbei.")
         await self.pump()
-        self.assertEqual(self.audio.spoken, ["<gong>"])    # nur Signal, kein Vorlesen
+        self.assertEqual(self.audio.spoken, ["<gong>"])    # only a signal, no reading aloud
         self.assertEqual(self.phone.state, S.IDLE)
-        self.assertEqual(self.modem.store, {})            # aus dem Modem gelöscht
-        await self.press("MSG")                            # erst auf Tastendruck vorlesen
+        self.assertEqual(self.modem.store, {})            # deleted from the modem
+        await self.press("MSG")                            # read aloud only on a key press
         self.assertIn("Neue Nachricht von Maria, heute um 18 Uhr.", self.said())
         self.assertIn("Ich komme morgen um drei vorbei.", self.said())
         self.assertEqual(self.phone.state, S.READING)
-        await self.press("CALL")                           # zurückrufen
+        await self.press("CALL")                           # call back
         self.assertIn("ATD+491609876543;", self.modem.log)
 
     async def test_signal_repeats_and_led_blinks_until_read(self):
         self.modem.inject_sms("+491609876543", "Hallo")
         await self.pump()
         self.assertEqual(self.audio.spoken.count("<gong>"), 1)
-        for _ in range(4):                                 # 1 s an, 2 s aus
+        for _ in range(4):                                 # 1 s on, 2 s off
             self.q.put_nowait("tick")
             await self.pump(2)
         self.assertIn("LED an", self.hw.log)
@@ -260,19 +274,19 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
         self.clock += dt.timedelta(minutes=5)
         self.q.put_nowait("tick")
         await self.pump()
-        self.assertEqual(self.audio.spoken.count("<gong>"), 1)  # noch nicht fällig
+        self.assertEqual(self.audio.spoken.count("<gong>"), 1)  # not due yet
         self.clock += dt.timedelta(minutes=5)
         self.q.put_nowait("tick")
         await self.pump()
-        self.assertEqual(self.audio.spoken.count("<gong>"), 2)  # Erinnerung nach 10 min
+        self.assertEqual(self.audio.spoken.count("<gong>"), 2)  # reminder after 10 min
         await self.press("MSG")
-        await self.press("HANGUP")                         # gelesen, zurück in Ruhe
+        await self.press("HANGUP")                         # read, back to idle
         self.hw.log.clear()
         self.clock += dt.timedelta(minutes=30)
         for _ in range(3):
             self.q.put_nowait("tick")
             await self.pump(2)
-        self.assertEqual(self.audio.spoken.count("<gong>"), 2)  # keine Erinnerung mehr
+        self.assertEqual(self.audio.spoken.count("<gong>"), 2)  # no more reminders
         self.assertNotIn("LED an", self.hw.log)
         self.assertFalse(self.hw.led)
 
@@ -281,7 +295,7 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
         self.modem.inject_sms("+491711234567", text)
         await self.pump()
         self.assertEqual(self.phone.inbox[0]["text"], text.strip())
-        self.assertEqual(self.audio.spoken.count("<gong>"), 1)   # ein Signal, nicht pro Teil
+        self.assertEqual(self.audio.spoken.count("<gong>"), 1)   # one signal, not one per part
         await self.press("MSG")
         self.assertEqual(self.said().count("Nachricht von Peter"), 1)
 
@@ -291,13 +305,13 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
         await self.press("CALL")
         self.modem.inject_sms("+491609876543", "Bis gleich")
         await self.pump()
-        self.assertNotIn("<gong>", self.audio.spoken)     # kein Gong ins Gespräch
+        self.assertNotIn("<gong>", self.audio.spoken)     # no gong during a call
         self.modem.inject("call_end")
         await self.pump()
         self.q.put_nowait("tick")
         await self.pump()
-        self.assertIn("<gong>", self.audio.spoken)        # danach angekündigt …
-        self.assertNotIn("Bis gleich", self.said())        # … aber nicht vorgelesen
+        self.assertIn("<gong>", self.audio.spoken)        # announced afterwards …
+        self.assertNotIn("Bis gleich", self.said())        # … but not read aloud
 
     async def test_quiet_hours_only_led(self):
         self.clock = dt.datetime(2026, 11, 1, 23, 5)
@@ -305,9 +319,9 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
         for _ in range(3):
             self.q.put_nowait("tick")
             await self.pump(2)
-        self.assertNotIn("<gong>", self.audio.spoken)     # nachts kein Ton
+        self.assertNotIn("<gong>", self.audio.spoken)     # no sound at night
         self.assertIn("LED an", self.hw.log)
-        self.clock = dt.datetime(2026, 11, 2, 7, 0)        # Ruhezeit vorbei
+        self.clock = dt.datetime(2026, 11, 2, 7, 0)        # quiet hours over
         self.q.put_nowait("tick")
         await self.pump()
         self.assertIn("<gong>", self.audio.spoken)
@@ -348,8 +362,8 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
         self.q.put_nowait(KeyEvent("SOS", "down"))
         self.q.put_nowait(KeyEvent("SOS", "long"))
         await self.pump(40)
-        self.assertIn("ATD+491711234567;", self.modem.log)     # Peter geht nicht ran
-        self.assertTrue(await self.pump_until(                  # nach 2 s Pause: Maria
+        self.assertIn("ATD+491711234567;", self.modem.log)     # Peter doesn't answer
+        self.assertTrue(await self.pump_until(                  # after a 2 s pause: Maria
             lambda: "ATD+491609876543;" in self.modem.log))
         self.modem.inject("call_begin")
         await self.pump()
@@ -359,7 +373,7 @@ class PhoneTests(unittest.IsolatedAsyncioTestCase):
         sms_to = {n for n, _ in self.modem.sent}
         self.assertEqual(sms_to, {"+491711234567", "+491609876543", "+491525550000"})
         self.assertTrue(any("openstreetmap" in t for _, t in self.modem.sent))
-        # Rückruf von Peter wird automatisch angenommen
+        # callback from Peter is answered automatically
         self.modem.inject_call("+491711234567")
         await self.pump()
         self.assertEqual(self.modem.log[-1], "ATA")

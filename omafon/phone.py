@@ -1,9 +1,9 @@
-"""Zustandsautomat des Telefons.
+"""State machine of the phone.
 
-Alle Ereignisse (Tasten, Modem, Sekundentakt) kommen über EINE Warteschlange.
-Ereignis-Handler blockieren nie: kurze Ansagen laufen als eigene Tasks
-(speak), lange Abläufe (Sprachwahl, Diktat, Notruf) als "Job", den die
-Auflegen-Taste jederzeit abbrechen kann.
+All events (keys, modem, one-second tick) arrive through ONE queue.
+Event handlers never block: short announcements run as their own tasks
+(speak), long flows (voice dialing, dictation, emergency call) as a "job"
+that the hang-up key can cancel at any time.
 """
 from __future__ import annotations
 
@@ -26,19 +26,19 @@ DIGITS = set("0123456789*#")
 
 
 class S(Enum):
-    IDLE = auto()        # Bereitschaft
-    ENTRY = auto()       # Nummer wird eingegeben
-    VOICE_DIAL = auto()  # "Wen möchtest du anrufen?"
-    OUTGOING = auto()    # es klingelt beim anderen
+    IDLE = auto()        # idle
+    ENTRY = auto()       # number is being entered
+    VOICE_DIAL = auto()  # "Whom do you want to call?"
+    OUTGOING = auto()    # ringing at the other end
     IN_CALL = auto()
-    RINGING = auto()     # eingehender Anruf
-    READING = auto()     # SMS vorlesen
-    DICTATE = auto()     # SMS diktieren (Aufnahme läuft)
-    CONFIRM = auto()     # diktierte SMS bestätigen
-    SOS = auto()         # Notruf
+    RINGING = auto()     # incoming call
+    READING = auto()     # reading SMS aloud
+    DICTATE = auto()     # dictating an SMS (recording)
+    CONFIRM = auto()     # confirming a dictated SMS
+    SOS = auto()         # emergency call
 
 
-# Feste Ansagen – werden von tools/prerender.py vorab erzeugt.
+# Fixed announcements (spoken German) – pre-rendered by tools/prerender.py.
 P = {
     "ready": "Telefon ist bereit.",
     "deleted": "gelöscht",
@@ -79,7 +79,7 @@ P = {
     "sos_nobody": "Ich habe niemanden erreicht. Alle Notfallkontakte haben eine SMS bekommen.",
     "modem_restart": "Das Mobilfunkteil startet neu. Bitte einen Moment warten.",
     "modem_dead": "Achtung, Telefonieren ist gerade nicht möglich.",
-    # Festnetz (backend: sip)
+    # Landline (backend: sip)
     "link_lost": "Keine Verbindung zur Fritzbox. Ich versuche es weiter.",
     "link_ok": "Verbindung zur Fritzbox ist wieder da.",
     "voicemail": "Nachricht auf dem Anrufbeantworter.",
@@ -102,7 +102,7 @@ class Call:
     ended: asyncio.Event = field(default_factory=asyncio.Event)
     speaker: bool = False
     reason: str = ""
-    hold_hint: bool = False      # Hinweis "länger drücken" schon gegeben
+    hold_hint: bool = False      # "press longer" hint already given
 
 
 class Phone:
@@ -124,7 +124,7 @@ class Phone:
         self.partial: dict[tuple, dict] = {}
         self.playlist: list[int] = []
         self.read_pos = 0
-        self.next_news_signal: dt.datetime | None = None   # nächster Erinnerungs-Gong
+        self.next_news_signal: dt.datetime | None = None   # next reminder gong
         self.led_on = False
         self.pending_dial: str | None = None
         self.draft_to: str | None = None
@@ -134,9 +134,9 @@ class Phone:
         self.battery_warned: set[int] = set()
         self.modem_failures = 0
         self.ticks = 0
-        self.link_reminder: dt.datetime | None = None    # Verbindung weg: nächste Erinnerung
+        self.link_reminder: dt.datetime | None = None    # connection lost: next reminder
 
-    # ================================================================ Grundlagen
+    # ================================================================ Basics
     def _load(self, name, default):
         try:
             return json.loads((self.data / name).read_text(encoding="utf-8"))
@@ -146,23 +146,23 @@ class Phone:
     def _save(self, name, obj) -> None:
         tmp = self.data / (name + ".tmp")
         tmp.write_text(json.dumps(obj, ensure_ascii=False, indent=1), encoding="utf-8")
-        os.replace(tmp, self.data / name)   # atomar: kein halbes JSON nach Stromausfall
+        os.replace(tmp, self.data / name)   # atomic: no half-written JSON after a power cut
 
     def bg(self, coro) -> asyncio.Task:
-        """Hintergrund-Task mit fester Referenz (sonst kann asyncio ihn verlieren)."""
+        """Background task with a strong reference (otherwise asyncio may lose it)."""
         t = asyncio.create_task(coro)
         self._bg.add(t)
         t.add_done_callback(self._bg.discard)
         return t
 
     def speak(self, text: str) -> None:
-        """Ansage ohne zu warten; unterbricht die laufende."""
+        """Announcement without waiting; interrupts the current one."""
         self.bg(self.audio.say(text))
 
     def start_job(self, coro) -> None:
         self.cancel_job()
         self.job = asyncio.create_task(self._guard(coro))
-        self.job.add_done_callback(lambda _t: coro.close())  # nie gestartet -> sauber schließen
+        self.job.add_done_callback(lambda _t: coro.close())  # never started -> close cleanly
 
     def cancel_job(self) -> None:
         if self.job and not self.job.done() and self.job is not asyncio.current_task():
@@ -175,7 +175,7 @@ class Phone:
         except asyncio.CancelledError:
             raise
         except Exception:
-            log.exception("Fehler im Ablauf")
+            log.exception("Error in flow")
             await self.audio.say("Es ist ein Fehler aufgetreten.")
             self.go_idle()
 
@@ -195,7 +195,7 @@ class Phone:
         h = self.now().hour
         return (h >= start or h < end) if start > end else (start <= h < end)
 
-    # ================================================================ Hauptschleife
+    # ================================================================ Main loop
     async def run(self) -> None:
         await self.startup()
         while True:
@@ -203,7 +203,7 @@ class Phone:
             try:
                 await self.handle(ev)
             except Exception:
-                log.exception("Fehler bei Ereignis %r", ev)
+                log.exception("Error handling event %r", ev)
 
     async def startup(self) -> None:
         self.audio.route("speaker")
@@ -212,10 +212,10 @@ class Phone:
             for idx in await self.modem.stored_indices():
                 await self.on_sms(idx, announce=False)
         except ModemError as e:
-            log.warning("Gespeicherte SMS nicht lesbar: %s", e)
+            log.warning("Stored SMS not readable: %s", e)
         await self.audio.say(P["ready"])
         if self.unread_count():
-            self.next_news_signal = self.now()          # beim nächsten Takt ankündigen
+            self.next_news_signal = self.now()          # announce on the next tick
 
     async def handle(self, ev) -> None:
         if isinstance(ev, KeyEvent):
@@ -226,7 +226,7 @@ class Phone:
         elif ev == "tick":
             await self.on_tick()
 
-    # ================================================================ Tasten
+    # ================================================================ Keys
     async def on_key(self, ev: KeyEvent) -> None:
         k, kind = ev.key, ev.kind
         if k in ("VOL_UP", "VOL_DOWN"):
@@ -300,9 +300,9 @@ class Phone:
             self.state, self.number = S.ENTRY, k
 
     def hangup_deliberate(self, kind: str) -> bool:
-        """Im Gespräch zählt Auflegen nur, wenn die Taste gehalten wurde – die
-        Wange streift die Taste am Ohr sonst leicht. Einstellen in die Schale
-        legt weiter sofort auf."""
+        """During a call, hanging up only counts if the key was held – otherwise
+        the cheek brushes the key at the ear. Putting the handset into the
+        cradle still hangs up immediately."""
         hold = self.cfg.hangup_hold_s
         if kind == "long" or hold <= 0 or getattr(self, "key_held", 0.0) >= hold:
             return True
@@ -369,7 +369,7 @@ class Phone:
             self.go_idle()
             self.speak(P["discarded"])
         elif k in ("CALL", "MSG", "INFO"):
-            self.stt.stop_flag.set()          # Aufnahme vorzeitig beenden
+            self.stt.stop_flag.set()          # stop recording early
 
     async def key_confirm(self, k, kind):
         if k == "CALL":
@@ -390,7 +390,7 @@ class Phone:
             self.go_idle()
             self.speak(P["sos_cancel"])
 
-    # ---------------------------------------------------------------- Lautstärke
+    # ---------------------------------------------------------------- Volume
     async def change_volume(self, delta: int) -> None:
         level = self.audio.set_volume(self.audio.volume + delta)
         if self.state in (S.IN_CALL, S.OUTGOING):
@@ -402,15 +402,15 @@ class Phone:
         else:
             self.speak(f"Lautstärke {level}.")
 
-    # ---------------------------------------------------------------- Ladeschale
+    # ---------------------------------------------------------------- Cradle
     async def on_charger(self, kind: str) -> None:
         if kind not in ("down", "up"):
             return
         if self.state == S.RINGING and kind == "up" and self.cfg.answer_on_lift:
-            return await self.answer()                # Abheben = Annehmen
+            return await self.answer()                # lifting = answering
         if self.state in (S.IN_CALL, S.OUTGOING) and self.call:
             if kind == "down" and self.cfg.dock_in_call == "hangup":
-                return await self.end_call(P["hung_up"])    # Einstellen = Auflegen
+                return await self.end_call(P["hung_up"])    # putting down = hanging up
             if kind == "down" and self.cfg.dock_in_call == "handsfree":
                 self.call.speaker = True
                 self.audio.route("speaker")
@@ -427,7 +427,7 @@ class Phone:
         if self.state == S.IDLE:
             self.speak(("Lädt." if kind == "down" else "Vom Ladegerät genommen.") + pct)
 
-    # ================================================================ Notruf
+    # ================================================================ Emergency call
     def on_sos_key(self, k: str, kind: str) -> None:
         if self.state == S.SOS:
             return
@@ -437,7 +437,7 @@ class Phone:
             self.sos_counting = True
             self.start_job(self.sos_countdown())
         elif k == "SOS" and kind == "short" and self.sos_counting:
-            self.sos_counting = False          # zu früh losgelassen
+            self.sos_counting = False          # released too early
             self.cancel_job()
             self.go_idle()
             self.speak(P["cancelled"])
@@ -454,7 +454,7 @@ class Phone:
 
     async def sos_job(self) -> None:
         self.state = S.SOS
-        if self.call:                                  # laufendes Gespräch beenden
+        if self.call:                                  # end the current call
             await self.end_call(None)
             self.state = S.SOS
         self.audio.route("speaker")
@@ -463,9 +463,9 @@ class Phone:
         await self.audio.say(P["sos_start"])
         await asyncio.sleep(self.cfg.sos_cancel_window_s)
         await self.audio.say(P["sos_running"])
-        if not self.modem.online:                     # trotzdem versuchen – vielleicht gleich wieder da
+        if not self.modem.online:                     # try anyway – it may be back in a moment
             await self.audio.say(self.offline_phrase())
-        self.bg(self.sos_sms())            # läuft unabhängig weiter
+        self.bg(self.sos_sms())            # keeps running independently
         chain = self.cfg.emergency_chain()
         targets = [(c.name, c.number) for c in chain] or [("den Notruf", "112")]
         for _round in range(self.cfg.emergency_rounds):
@@ -495,7 +495,7 @@ class Phone:
             try:
                 await self.modem.send_sms(n, base)
             except ModemError as e:
-                log.error("Notruf-SMS an %s: %s", n, e)
+                log.error("Emergency SMS to %s: %s", n, e)
         pos = await self.modem.gps_position(60)
         if pos:
             link = f"https://www.openstreetmap.org/?mlat={pos[0]:.5f}&mlon={pos[1]:.5f}&zoom=17"
@@ -508,13 +508,13 @@ class Phone:
     def callback_active(self) -> bool:
         return bool(self.callback_until and self.now() < self.callback_until)
 
-    # ================================================================ Anrufe
+    # ================================================================ Calls
     def offline_phrase(self) -> str:
-        """Ansage 'kein Netz' – der Text kommt aus P, das Backend wählt den Schlüssel."""
+        """Announce 'no network' – the text comes from P, the backend picks the key."""
         return P.get(getattr(self.modem, "offline_key", "link_lost"), P["link_lost"])
 
     def docked_speaker(self) -> bool:
-        """Steht das Telefon in der Ladeschale mit Lautsprecher -> freisprechen."""
+        """If the phone sits in the cradle with the speaker -> hands-free."""
         return bool(self.cfg.dock_speaker and self.hw.on_charger())
 
     async def place_call(self, number: str, speaker: bool = False) -> Call:
@@ -524,7 +524,7 @@ class Phone:
         try:
             await self.modem.dial(number)
         except ModemError as e:
-            log.error("Wählen fehlgeschlagen: %s", e)
+            log.error("Dialing failed: %s", e)
             self.call.reason = "error"
             self.call.ended.set()
         return self.call
@@ -548,7 +548,7 @@ class Phone:
         self.state = S.OUTGOING
         await self.audio.say(f"Ich rufe {name} an." if name else
                              f"Ich wähle {spoken_number(number)}.")
-        if self.state != S.OUTGOING:      # inzwischen aufgelegt
+        if self.state != S.OUTGOING:      # hung up in the meantime
             return
         call = await self.place_call(number)
         if call.ended.is_set():
@@ -560,7 +560,7 @@ class Phone:
         try:
             await self.modem.answer()
         except ModemError as e:
-            log.error("Annehmen: %s", e)
+            log.error("Answer: %s", e)
         if self.call:
             self.call.answered.set()
             self.call.speaker = self.call.speaker or self.docked_speaker()
@@ -594,7 +594,7 @@ class Phone:
 
     async def ring_loop(self) -> None:
         try:
-            await asyncio.sleep(0.3)        # auf +CLIP warten
+            await asyncio.sleep(0.3)        # wait for +CLIP
             while True:
                 self.hw.vibrate(True)
                 self.hw.flash(True)
@@ -613,7 +613,7 @@ class Phone:
             self.ring_task.cancel()
         self.ring_task = None
 
-    # ================================================================ Modem-Ereignisse
+    # ================================================================ Modem events
     async def on_modem(self, ev: ModemEvent) -> None:
         k = ev.kind
         if k == "ring":
@@ -621,7 +621,7 @@ class Phone:
             if self.call is None:
                 self.call = Call(None, incoming=True)
                 if self.state != S.SOS:
-                    self.cancel_job()           # Vorlesen, Diktat usw. weichen dem Anruf
+                    self.cancel_job()           # reading aloud, dictation etc. give way to the call
                     self.state = S.RINGING
                     self.audio.route("speaker")
                     self.ring_task = asyncio.create_task(self.ring_loop())
@@ -629,7 +629,7 @@ class Phone:
             self.call.number = ev.data or None
             c = self.cfg.by_number(ev.data) if ev.data else None
             if c and c.emergency and (self.callback_active() or self.state == S.SOS):
-                self.call.speaker = True    # Rückruf im Notfall: sofort auf Lautsprecher
+                self.call.speaker = True    # callback during an emergency: speaker on right away
                 self.audio.set_volume(5)
                 await self.answer()
         elif k == "call_begin":
@@ -646,15 +646,15 @@ class Phone:
             except (ValueError, ModemError) as e:
                 log.error("SMS %s: %s", ev.data, e)
         elif k == "link_lost":
-            # Nachts nicht wecken: dann sagt es erst ein Tastendruck oder die
-            # Erinnerung nach der Ruhezeit (link_reminder ist dann schon fällig).
+            # Don't wake anyone at night: a key press or the reminder after the
+            # quiet hours says it (link_reminder is already due by then).
             quiet = self.quiet_now()
             self.link_reminder = self.now() + (dt.timedelta(0) if quiet else
                                                dt.timedelta(minutes=self.cfg.link_reminder_minutes))
             if self.state not in (S.IN_CALL, S.SOS) and not quiet:
                 self.speak(P.get(ev.data, self.offline_phrase()))
         elif k == "link_ok":
-            # data = P-Schlüssel (z. B. network_ok, mode_home); leer = link_ok
+            # data = P key (e.g. network_ok, mode_home); empty = link_ok
             self.link_reminder = None
             if self.state not in (S.IN_CALL, S.SOS) and not self.quiet_now():
                 self.speak(P.get(ev.data, P["link_ok"]))
@@ -694,10 +694,10 @@ class Phone:
             entry = self.partial.setdefault(key, {"t": self.now(), "parts": {}, "d": d})
             entry["parts"][d.concat_seq] = d.text
             if len(entry["parts"]) < d.concat_total:
-                return                                  # auf weitere Teile warten
+                return                                  # wait for further parts
             del self.partial[key]
             text = "".join(entry["parts"][i] for i in sorted(entry["parts"]))
-        audio = getattr(d, "audio", None)            # Anrufbeantworter: Pfad oder ""
+        audio = getattr(d, "audio", None)            # answering machine: path or ""
         if audio is not None:
             text = P["voicemail"] if audio else P["voicemail_unplayable"]
         await self.store_sms(d.sender, text, d.timestamp, announce, audio=audio or "")
@@ -712,15 +712,15 @@ class Phone:
         if audio:
             msg["audio"] = audio
         self.inbox.insert(0, msg)
-        for old in self.inbox[50:]:                     # alte Aufnahmen mit löschen
+        for old in self.inbox[50:]:                     # delete old recordings too
             if old.get("audio"):
                 Path(old["audio"]).unlink(missing_ok=True)
         del self.inbox[50:]
         self._save("inbox.json", self.inbox)
         if not announce:
             return
-        # Nie automatisch vorlesen: nur Signal + LED. Vorgelesen wird erst auf
-        # Tastendruck (Nachricht-Taste). Im Gespräch/Menü kommt der Gong danach.
+        # Never read aloud automatically: only gong + LED. Reading happens on a
+        # key press (message key). During a call/menu the gong comes afterwards.
         self.next_news_signal = self.now()
         await self.signal_news()
 
@@ -728,7 +728,7 @@ class Phone:
         return sum(not m["read"] for m in self.inbox)
 
     async def signal_news(self) -> None:
-        """Gong für ungelesene Nachrichten, wenn fällig und das Telefon in Ruhe ist."""
+        """Gong for unread messages when due and the phone is idle."""
         if not self.unread_count():
             self.next_news_signal = None
             return
@@ -742,8 +742,8 @@ class Phone:
         self.next_news_signal = now + dt.timedelta(minutes=minutes) if minutes > 0 else None
 
     def update_news_led(self) -> None:
-        """Langsames Blinken (1 s an, 2 s aus), solange Ungelesenes da ist."""
-        if self.state == S.RINGING:                     # LED gehört gerade dem Klingeln
+        """Slow blinking (1 s on, 2 s off) while there is something unread."""
+        if self.state == S.RINGING:                     # the LED currently belongs to ringing
             return
         want = bool(self.cfg.news_led and self.unread_count() and self.ticks % 3 == 0)
         if want != self.led_on:
@@ -759,12 +759,12 @@ class Phone:
         try:
             await self.modem.send_sms(number, txt)
         except ModemError as e:
-            log.error("Status-SMS: %s", e)
+            log.error("Status SMS: %s", e)
 
     def build_playlist(self) -> list[int]:
         unread = [i for i, m in enumerate(self.inbox) if not m["read"]]
         read = [i for i, m in enumerate(self.inbox) if m["read"]]
-        return list(reversed(unread)) + read      # Ungelesene älteste zuerst, dann der Rest
+        return list(reversed(unread)) + read      # unread oldest first, then the rest
 
     def when_words(self, iso: str) -> str:
         try:
@@ -806,7 +806,7 @@ class Phone:
         await asyncio.sleep(0.4)
         await self.audio.say(P["read_hint"])
 
-    # ================================================================ Sprachwahl & Diktat
+    # ================================================================ Voice dialing & dictation
     def all_words(self) -> list[str]:
         return [w for c in self.cfg.contacts for w in c.words()]
 
@@ -822,7 +822,7 @@ class Phone:
             return await self.audio.say(P["not_understood"])
         self.pending_dial = c.number
         await self.audio.say(f"{c.name}. Gelbe Taste zum Anrufen.")
-        await asyncio.sleep(15)                   # danach automatisch zurück
+        await asyncio.sleep(15)                   # then return automatically
         if self.state == S.VOICE_DIAL:
             self.go_idle()
 
@@ -862,8 +862,8 @@ class Phone:
             self.go_idle()
             await self.audio.say(P["sent"])
         except ModemError as e:
-            log.error("SMS senden: %s", e)
-            self.state = S.CONFIRM                 # Text bleibt erhalten
+            log.error("Sending SMS: %s", e)
+            self.state = S.CONFIRM                 # the text is kept
             await self.audio.say(P["send_failed"])
 
     # ================================================================ Info
@@ -885,7 +885,7 @@ class Phone:
                                  "Keine neuen Nachrichten."))
         await self.audio.say(" ".join(parts))
 
-    # ================================================================ Sekundentakt
+    # ================================================================ One-second tick
     async def on_tick(self) -> None:
         self.ticks += 1
         now = self.now()
@@ -899,7 +899,7 @@ class Phone:
             self.go_idle()
         elif self.state == S.RINGING and (now - self.last_ring).total_seconds() > 8:
             await self.on_call_gone("missed")
-        for key, entry in list(self.partial.items()):     # unvollständige lange SMS
+        for key, entry in list(self.partial.items()):     # incomplete long SMS
             if (now - entry["t"]).total_seconds() > 120:
                 del self.partial[key]
                 text = " … ".join(entry["parts"][i] for i in sorted(entry["parts"]))

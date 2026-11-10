@@ -1,8 +1,8 @@
-"""AT-Treiber für SIMCom SIM7600 (A7670 sehr ähnlich).
+"""AT driver for the SIMCom SIM7600 (A7670 very similar).
 
-Ein Lesethread trennt Antworten auf Befehle von unaufgeforderten Meldungen
-(URCs wie RING, +CLIP, +CMTI). URCs landen als ModemEvent in der
-Ereignis-Warteschlange des Telefons.
+A reader thread separates answers to commands from unsolicited messages
+(URCs like RING, +CLIP, +CMTI). URCs end up as ModemEvent in the phone's
+event queue.
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ IGNORED_URCS = ("+CPIN:", "SMS DONE", "PB DONE", "RDY", "+CGEV:", "+CREG:", "+CE
 
 
 class Modem(TelephonyBackend):
-    """Mobilfunkteil des Hybridgeräts: SIM7600 mit SMS und GPS."""
+    """Mobile part of the hybrid device: SIM7600 with SMS and GPS."""
     name = "sim7600"
     supports_sms = True
 
@@ -36,7 +36,7 @@ class Modem(TelephonyBackend):
         self.port, self.baud = port, baud
         self.events, self.loop = events, loop
         self.ser = None
-        self._lock = asyncio.Lock()           # immer nur ein Befehl gleichzeitig
+        self._lock = asyncio.Lock()           # only one command at a time
         self._resp: list[str] = []
         self._done = threading.Event()
         self._prompt = threading.Event()
@@ -45,7 +45,7 @@ class Modem(TelephonyBackend):
         self._busy = False
         self._ref = 0
 
-    # ------------------------------------------------------------ Verbindung
+    # ------------------------------------------------------------ Connection
     async def start(self) -> None:
         import serial  # pyserial
         self.ser = serial.Serial(self.port, self.baud, timeout=0.2)
@@ -74,8 +74,8 @@ class Modem(TelephonyBackend):
         while True:
             try:
                 chunk = self.ser.read(256)
-            except Exception as e:  # Kabel ab, Modem-Reset …
-                log.error("Serielle Schnittstelle: %s", e)
+            except Exception as e:  # cable unplugged, modem reset …
+                log.error("Serial port: %s", e)
                 time.sleep(1)
                 continue
             if not chunk:
@@ -119,14 +119,14 @@ class Modem(TelephonyBackend):
         if line.startswith(IGNORED_URCS):
             return
         if self._busy:
-            self._resp.append(line)   # z. B. die PDU-Zeile nach +CMGR
+            self._resp.append(line)   # e.g. the PDU line after +CMGR
         else:
-            log.debug("unbekannt: %s", line)
+            log.debug("unknown: %s", line)
 
-    # ------------------------------------------------------------ Befehle
+    # ------------------------------------------------------------ Commands
     async def cmd(self, command: str, timeout: float = 5, prefix: str | None = None,
                   payload: str | None = None) -> list[str]:
-        """Sendet einen AT-Befehl. payload: Daten nach dem '>'-Prompt (SMS)."""
+        """Sends an AT command. payload: data after the '>' prompt (SMS)."""
         async with self._lock:
             self._resp, self._error = [], None
             self._done.clear()
@@ -152,7 +152,7 @@ class Modem(TelephonyBackend):
             finally:
                 self._busy = False
 
-    # ------------------------------------------------------------ Telefonie
+    # ------------------------------------------------------------ Telephony
     async def dial(self, number: str) -> None:
         await self.cmd(f"ATD{number};", timeout=20)
 
@@ -172,7 +172,7 @@ class Modem(TelephonyBackend):
         await self.cmd(f"AT+CLVL={max(0, min(5, level))}")
 
     async def set_radio(self, on: bool) -> None:
-        """Funkteil an (CFUN=1) oder aus (CFUN=4, Flugmodus) – für den Hybrid-Sparmodus."""
+        """Radio on (CFUN=1) or off (CFUN=4, airplane mode) – for the hybrid power saving."""
         await self.cmd(f"AT+CFUN={1 if on else 4}", timeout=15)
 
     # ------------------------------------------------------------ SMS
@@ -184,14 +184,14 @@ class Modem(TelephonyBackend):
         try:
             return pdu.decode_deliver(hexline)
         except (ValueError, IndexError) as e:
-            log.error("PDU nicht lesbar (%s): %s", e, hexline)
+            log.error("PDU not readable (%s): %s", e, hexline)
             return None
 
     async def delete_sms(self, index: int) -> None:
         await self.cmd(f"AT+CMGD={index}")
 
     async def stored_indices(self) -> list[int]:
-        """Alle gespeicherten SMS (z. B. empfangen, während das Telefon aus war)."""
+        """All stored SMS (e.g. received while the phone was off)."""
         lines = await self.cmd("AT+CMGL=4", prefix="+CMGL", timeout=20)
         return [int(l.split(":")[1].split(",")[0]) for l in lines if l.startswith("+CMGL")]
 
@@ -217,11 +217,11 @@ class Modem(TelephonyBackend):
             return False
 
     async def gps_position(self, timeout: float = 30) -> tuple[float, float] | None:
-        """Einmalige Ortung für den Notruf. Drinnen oft ohne Ergebnis."""
+        """One-off location fix for the emergency call. Often no result indoors."""
         try:
             await self.cmd("AT+CGPS=1")
         except ModemError:
-            pass  # läuft evtl. schon
+            pass  # may already be running
         end = time.monotonic() + timeout
         try:
             while time.monotonic() < end:
@@ -243,7 +243,7 @@ class Modem(TelephonyBackend):
 
 
 class SimModem(TelephonyBackend):
-    """Ersatz-Modem für PC und Tests. Ereignisse kommen aus inject_*()."""
+    """Stand-in modem for the PC and tests. Events come from inject_*()."""
     name = "sim7600"
     supports_sms = True
 
@@ -254,7 +254,7 @@ class SimModem(TelephonyBackend):
         self.sent: list[tuple[str, str]] = []
         self._next = 0
         self.fail_alive = False
-        self.csq = 22                # simulierter Empfang (0/99 = kein Netz)
+        self.csq = 22                # simulated reception (0/99 = no network)
         self.radio = True
 
     def _say(self, msg: str) -> None:
@@ -265,9 +265,9 @@ class SimModem(TelephonyBackend):
     async def start(self) -> None:
         self._say("bereit")
 
-    # Telefon -> Netz
+    # phone -> network
     async def dial(self, number):
-        emergency = number in ("112", "110")       # Notruf geht auch ohne eigenes Netz
+        emergency = number in ("112", "110")       # emergency calls work even without our own network
         if not self.radio or (self.csq in (0, 99) and not emergency):
             raise ModemError("kein Mobilfunknetz (Simulation)")
         self._say(f"ATD{number};")
@@ -292,7 +292,7 @@ class SimModem(TelephonyBackend):
         self.sent.append((number, text))
         self._say(f"SMS an {number}: {text}")
 
-    # Netz -> Telefon (Simulation)
+    # network -> phone (simulation)
     def inject(self, kind: str, data: str = "") -> None:
         self.events.put_nowait(ModemEvent(kind, data))
 

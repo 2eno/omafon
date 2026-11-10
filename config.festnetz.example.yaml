@@ -1,40 +1,40 @@
-# Omafon – Beispielkonfiguration FESTNETZ (Fritz!Box, WLAN, SIP).
-# Kopieren nach /etc/omafon/config.yaml und Platzhalter ersetzen.
-# Echte Kennwörter NIE ins Repository – config.yaml steht in .gitignore.
+# Omafon – example configuration LANDLINE (Fritz!Box, Wi-Fi, SIP).
+# Copy to /etc/omafon/config.yaml and replace the placeholders.
+# NEVER put real passwords into the repository – config.yaml is in .gitignore.
 backend: sip
 owner_name: Oma Erika
 
 sip:
   registrar: fritz.box
-  # Fritz!Box: Telefonie → Telefoniegeräte → Neues Gerät → Telefon → LAN/WLAN (IP-Telefon).
-  # Benutzername und Kennwort von dort hier eintragen.
+  # Fritz!Box: Telephony → Telephony Devices → New Device → Telephone → LAN/WLAN (IP phone).
+  # Enter the user name and password from there here.
   user: "omafon-ip"
   password: "PLATZHALTER_SIP_KENNWORT"
   regint: 300
-  link_grace_s: 10             # so lange darf die Verbindung weg sein, bevor es angesagt wird
+  link_grace_s: 10             # the connection may be gone this long before it is announced
   wifi_iface: wlan0
 
 fritz:
   host: fritz.box
-  # Eigener Fritz!Box-Benutzer (System → FRITZ!Box-Benutzer) nur mit dem Recht
-  # "Sprachnachrichten, Faxnachrichten, FRITZ!App Fon und Anrufliste".
+  # Dedicated Fritz!Box user (System → FRITZ!Box Users) with only the right
+  # "voice messages, fax messages, FRITZ!App Fon and call list".
   user: "omafon"
   password: "PLATZHALTER_FRITZ_KENNWORT"
-  tam: 0                       # erster Anrufbeantworter
-  phonebook_id: 0              # erstes Telefonbuch
+  tam: 0                       # first answering machine
+  phonebook_id: 0              # first phone book
   tam_poll_s: 60
   tam_after_fetch: mark        # mark | delete | keep
 
-notify:                        # Ersatz für Notruf-SMS – optional, standardmäßig aus
+notify:                        # replacement for emergency SMS – optional, off by default
   enabled: false
-  telegram_token: null         # "123456:ABC…" vom @BotFather
-  smtp_host: null              # z. B. smtp.example.org
+  telegram_token: null         # "123456:ABC…" from @BotFather
+  smtp_host: null              # e.g. smtp.example.org
   smtp_port: 587
   smtp_user: null
   smtp_password: null
   smtp_from: null
 
-home_position: null            # z. B. [50.1109, 8.6821] – dann steht ein Kartenlink im Notruf-Hinweis
+home_position: null            # e.g. [50.1109, 8.6821] – then the emergency notice contains a map link
 
 contacts:
   - name: Peter
@@ -42,7 +42,7 @@ contacts:
     spoken: [peter, sohn]
     speed_dial: 1
     emergency: 1
-    telegram_chat_id: null     # Chat-ID, nachdem Peter dem Bot geschrieben hat
+    telegram_chat_id: null     # chat ID, after Peter has written to the bot
     email: peter@example.org
   - name: Maria
     number: "+491609876543"
@@ -56,10 +56,10 @@ contacts:
     speed_dial: 3
     emergency: 3
   - name: Doktor Weber
-    number: "06990009123"      # fiktiv (BNetzA-Bereich für Medien)
+    number: "06990009123"      # fictitious (BNetzA range for media)
     spoken: [doktor, arzt, weber]
     speed_dial: 9
-  - name: den Notruf           # immer zuletzt in der Kette
+  - name: den Notruf           # always last in the chain
     number: "112"
     spoken: [notruf]
     emergency: 9
@@ -70,18 +70,18 @@ emergency_callback_minutes: 30
 quiet_hours: [22, 7]
 news_signal_minutes: 10
 news_led: true
-link_reminder_minutes: 10      # Verbindung weg: Ansage alle 10 min wiederholen
+link_reminder_minutes: 10      # connection lost: repeat the announcement every 10 min
 
-# Ladeschale mit Lautsprecher
-answer_on_lift: true           # Abheben nimmt an
-dock_in_call: hangup           # Einstellen legt auf (wie ein klassischer Hörer); handsfree = Freisprechen
-dock_speaker: true             # in der Schale über deren Lautsprecher sprechen und klingeln
+# cradle with speaker
+answer_on_lift: true           # lifting answers
+dock_in_call: hangup           # putting down hangs up (like a classic handset); handsfree = hands-free
+dock_speaker: true             # in the cradle, talk and ring through its speaker
 
 default_route: earpiece
 volume: 4
 entry_timeout_s: 20
 long_press_s: 1.2
-hangup_hold_s: 0.5            # im Gespräch Auflegetaste so lange halten (Wange am Ohr streift sie sonst); 0 = sofort
+hangup_hold_s: 0.5            # during a call, hold the hang-up key this long (the cheek brushes it otherwise); 0 = immediately
 sos_hold_s: 3.0
 sos_cancel_window_s: 5
 

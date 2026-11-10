@@ -1,5 +1,5 @@
-"""Startpunkt.  python -m omafon.main --config /etc/omafon/config.yaml
-             python -m omafon.main --config config.festnetz.example.yaml --sim   (am PC testen)
+"""Entry point.  python -m omafon.main --config /etc/omafon/config.yaml
+             python -m omafon.main --config config.festnetz.example.yaml --sim   (test on a PC)
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ log = logging.getLogger("omafon")
 
 
 def sd_notify(msg: str) -> None:
-    """systemd-Watchdog ohne Zusatzpaket. Stirbt die Hauptschleife, startet systemd neu."""
+    """systemd watchdog without an extra package. If the main loop dies, systemd restarts."""
     addr = os.environ.get("NOTIFY_SOCKET")
     if not addr:
         return
@@ -40,7 +40,7 @@ async def watchdog(phone: Phone) -> None:
     last = -1
     while True:
         await asyncio.sleep(10)
-        if phone.ticks != last:          # Hauptschleife verarbeitet noch Ereignisse
+        if phone.ticks != last:          # main loop is still processing events
             sd_notify("WATCHDOG=1")
             last = phone.ticks
 
@@ -62,7 +62,7 @@ KEYMAP = {"a": "CALL", "h": "HANGUP", "m": "MSG", "i": "INFO", "+": "VOL_UP", "-
 
 
 def sim_console(loop, events, hw, modem, stt) -> None:
-    """modem = Simulator-Steuerung mit inject_call, inject_sms, inject (und ggf. link)."""
+    """modem = simulator control with inject_call, inject_sms, inject (and link if present)."""
     from .hardware import KeyEvent
     print(SIM_HELP, flush=True)
 
@@ -137,7 +137,7 @@ async def amain(args) -> None:
         try:
             amp = TPA2016()
         except OSError as e:
-            log.error("TPA2016 fehlt: %s", e)
+            log.error("TPA2016 missing: %s", e)
             amp = None
         audio = Audio(cfg, amp)
         hw = Hardware(cfg, events, loop)

@@ -1,212 +1,210 @@
-# Festnetz-Variante: Recherche und Bewertung
+# Landline variant: research and assessment
 
-Stand: November 2026. Ziel: ein schnurloses Omafon mit Ladeschale, das sich an der
-Fritz!Box anmeldet. Gleiche Zielgruppe wie die Mobilfunk-Variante: fortgeschrittene
-AMD, fast blind, Bedienung ohne Display, alles per Sprachausgabe.
+*English · [Deutsch](festnetz-recherche.de.md)*
 
-Belege stehen in eckigen Klammern und verweisen auf die [Quellen](#quellen) am Ende.
-**Ungeprüft** heißt: nur Forenaussage oder eigener Schluss, vor dem Bau am echten
-Gerät prüfen.
+As of November 2026. Goal: a cordless Omafon with a cradle that registers with the
+Fritz!Box. Same target group as the mobile variant: advanced AMD (macular
+degeneration), almost blind, operation without a display, everything via speech output.
 
-## Kurzfassung
+References are in square brackets and point to the [sources](#sources) at the end.
+**Unverified** means: only a forum statement or my own conclusion – check on the real
+device before building.
 
-- **Empfehlung: IP-Telefon über WLAN (SIP) mit dem Raspberry Pi Zero 2 W.** Die
-  Software dafür liegt in diesem Branch (`backend: sip`). Deine Vorannahme stimmt.
-- **Ein eigenes DECT-Handteil ist nicht unmöglich, aber unverhältnismäßig.** Es gibt
-  ein vorzertifiziertes GAP-Modul (Dialog/Renesas SC14CVMDECT) [8–10]. Mit eigener
-  Firmware muss das Endgerät aber neu zertifiziert werden [8], die Unterlagen sind
-  alt (2011–2015), und ob es noch lieferbar ist, ist offen.
-- **Widerspruch in einem Punkt:** DECT würde das größte Problem der WLAN-Lösung, die
-  **Akkulaufzeit**, *nicht* lösen. Sprachausgabe (Piper), Tasten und Spracherkennung
-  laufen auch dann auf dem Pi, und der Pi braucht in Ruhe etwa 0,6 W [13]. Der Pi ist
-  der Hauptverbraucher, nicht das Funkteil.
-- **Auch „kleinerer Akku“ stimmt nur halb.** Ohne Modem entfallen die 2-A-Sendespitzen.
-  Akku und Spannungswandler dürfen also schwächer belastbar sein. Der Ruhestrom sinkt
-  aber kaum (Modem in Ruhe ca. 0,1 W, Pi ca. 0,6 W, siehe
-  [festnetz-hardware.md](festnetz-hardware.md)). Mit gleich großem Akku hält die
-  Festnetz-Variante etwas länger; ein kleinerer Akku verkürzt die Bereitschaft.
-- Wichtiger Vorteil Festnetz: Beim Notruf 112 über den Festnetzanschluss übermittelt
-  der Anbieter in der Regel die Anschlussadresse. GPS wird damit weniger wichtig
-  (ungeprüft für den konkreten Anschluss, siehe offene Fragen).
+## Summary
 
-## 1. Wie Telefone sich an der Fritz!Box anmelden
+- **Recommendation: an IP phone over Wi-Fi (SIP) with the Raspberry Pi Zero 2 W.** The
+  software for it is in this branch (`backend: sip`). Your assumption is right.
+- **A DECT handset of our own is not impossible, but disproportionate.** There is a
+  pre-certified GAP module (Dialog/Renesas SC14CVMDECT) [8–10]. With custom firmware,
+  however, the end device has to be re-certified [8], the documents are old
+  (2011–2015), and whether it is still available is open.
+- **Disagreement on one point:** DECT would *not* solve the biggest problem of the
+  Wi-Fi solution, the **battery life**. Speech output (Piper), keys and speech
+  recognition still run on the Pi, and the Pi needs about 0.6 W at rest [13]. The Pi is
+  the main consumer, not the radio part.
+- **“Smaller battery” is only half right too.** Without a modem, the 2 A transmit peaks
+  are gone. So battery and voltage converter may be rated lower. But the idle current
+  hardly drops (modem at rest approx. 0.1 W, Pi approx. 0.6 W, see
+  [festnetz-hardware.md](festnetz-hardware.md)). With an equally large battery the
+  landline variant lasts a little longer; a smaller battery shortens the standby time.
+- Important advantage of the landline: for an emergency call to 112 over the landline,
+  the provider usually transmits the line address. GPS becomes less important
+  (unverified for the specific line, see open questions).
 
-### DECT-Handteil
+## 1. How phones register with the Fritz!Box
 
-- Die Fritz!Box ist eine DECT-Basis mit dem Profil **GAP**. Damit funktionieren
-  Handteile verschiedener Hersteller zusammen; welche Zusatzfunktionen gehen, hängt
-  vom Hersteller ab [5, 6].
-- Mit Fremdgeräten gibt es oft nur Grundfunktionen. Laut Forenberichten gehört nicht
-  einmal die Rufnummernanzeige (CLIP) sicher zu GAP, Telefonbuchzugriff schon gar
-  nicht [6]. Manche GAP-Geräte lassen sich an bestimmten Modellen nicht anmelden [6].
-- Für nicht GAP-konforme Geräte bietet die Fritz!Box eine Problemlösungs-Option in den
-  DECT-Einstellungen [7]. Eine Garantie gibt AVM nur bei GAP [7].
-- **DECT NR+ (DECT-2020)** ist ein Datenfunkstandard für IoT, kein Sprach-Handteil-
-  Profil, und hilft hier nicht [7].
+### DECT handset
 
-### IP-Telefon (SIP) über LAN/WLAN
+- The Fritz!Box is a DECT base with the **GAP** profile. With it, handsets from
+  different manufacturers work together; which extra functions work depends on the
+  manufacturer [5, 6].
+- Third-party devices often only get basic functions. According to forum reports, not
+  even caller ID (CLIP) is reliably part of GAP, let alone phone book access [6]. Some
+  GAP devices can’t be registered with certain models [6].
+- For devices that are not GAP-compliant, the Fritz!Box offers a troubleshooting option
+  in the DECT settings [7]. AVM only gives a guarantee for GAP [7].
+- **DECT NR+ (DECT-2020)** is a data radio standard for IoT, not a voice handset
+  profile, and doesn’t help here [7].
 
-- Fritz!Box: *Telefonie → Telefoniegeräte → Neues Gerät → Telefon → LAN/WLAN
-  (IP-Telefon)*. Die Box vergibt Benutzername und Kennwort, die das Telefon zur
-  Registrierung nutzt. Registrar ist die Fritz!Box selbst [1, 2].
-- Keinen STUN-Server eintragen. Das Telefon muss im Heimnetz sein, **nicht im
-  Gastnetz** [1, 2].
-- IP-Telefone dürfen nach dem Einrichten zunächst nur **Inlandsgespräche und
-  Notrufnummern** wählen. Auslandsgespräche lassen sich freischalten [3].
-- Für die Anmeldung aus dem Internet muss der Benutzername mindestens 8 Zeichen
-  haben [1]. Das brauchen wir nicht, die Option bleibt aus.
-- Der Raspberry Pi Zero 2 W kann nur **2,4-GHz-WLAN**. Das 2,4-GHz-Band der
-  Fritz!Box muss also an sein.
+### IP phone (SIP) over LAN/Wi-Fi
 
-## 2. TR-064: Telefonbuch, Anrufliste, Anrufbeantworter
+- Fritz!Box: *Telephony → Telephony Devices → New Device → Telephone → LAN/WLAN
+  (IP phone)*. The box assigns a user name and password that the phone uses to
+  register. The registrar is the Fritz!Box itself [1, 2].
+- Don’t enter a STUN server. The phone must be in the home network, **not in the guest
+  network** [1, 2].
+- After setup, IP phones may initially only dial **domestic calls and emergency
+  numbers**. International calls can be enabled [3].
+- For registration from the internet, the user name must have at least 8 characters
+  [1]. We don’t need that; the option stays off.
+- The Raspberry Pi Zero 2 W only supports **2.4 GHz Wi-Fi**. So the Fritz!Box’s
+  2.4 GHz band must be on.
 
-AVM dokumentiert TR-064 offiziell (Dienste X_AVM-DE_OnTel, X_AVM-DE_TAM u. a.) [4].
+## 2. TR-064: phone book, call list, answering machine
 
-| Zweck | Dienst / Aktion | Ergebnis |
+AVM documents TR-064 officially (services X_AVM-DE_OnTel, X_AVM-DE_TAM and others) [4].
+
+| Purpose | Service / action | Result |
 |---|---|---|
-| Telefonbuch | `X_AVM-DE_OnTel:1` `GetPhonebook(NewPhonebookID)` | URL zu einer XML-Datei mit `contact/person/realName` und `telephony/number` [4, 11] |
-| Anrufliste | `X_AVM-DE_OnTel:1` `GetCallList` | URL zu einer XML-Liste; Fehler 820, wenn nicht unterstützt [11] |
-| AB-Nachrichten | `X_AVM-DE_TAM:1` `GetMessageList(NewIndex)` | URL zu einer XML-Liste; je Nachricht `Index`, `Tam`, `Number`, `Name`, `Date`, `Duration`, `New`, `Path` [12, 14] |
-| AB gehört markieren | `X_AVM-DE_TAM:1` `MarkMessage` | – [12] |
-| AB löschen | `X_AVM-DE_TAM:1` `DeleteMessage` | – [12] |
+| Phone book | `X_AVM-DE_OnTel:1` `GetPhonebook(NewPhonebookID)` | URL of an XML file with `contact/person/realName` and `telephony/number` [4, 11] |
+| Call list | `X_AVM-DE_OnTel:1` `GetCallList` | URL of an XML list; error 820 if not supported [11] |
+| Answering machine messages | `X_AVM-DE_TAM:1` `GetMessageList(NewIndex)` | URL of an XML list; per message `Index`, `Tam`, `Number`, `Name`, `Date`, `Duration`, `New`, `Path` [12, 14] |
+| Mark as listened | `X_AVM-DE_TAM:1` `MarkMessage` | – [12] |
+| Delete message | `X_AVM-DE_TAM:1` `DeleteMessage` | – [12] |
 
-- **Aufnahmen herunterladen:** `Path` zeigt auf
-  `/download.lua?path=/data/tam/rec/rec.0.NNN` [14]. Für den Download braucht es die
-  Sitzungs-ID (`sid`). Sie steckt in der URL, die `GetMessageList` liefert. Das ist
-  ein Schluss aus dem Aufbau dieser URLs, nicht offiziell belegt.
-- **Format der Aufnahmen: offen.** Der Push-Service verschickt AB-Nachrichten als
-  WAV [15]. Die Dateien auf der Box sollen laut einem Forenbeitrag ein anderes Format
-  haben (genannt wird Speex, unbestätigt) [15]. Omafon spielt WAV direkt ab und
-  wandelt alles andere mit `ffmpeg`. Klappt beides nicht, sagt das Telefon
-  „Abspielen geht leider nicht“.
-- **Zugang:** eigener Fritz!Box-Benutzer, nur mit dem Recht „Sprachnachrichten,
-  Faxnachrichten, FRITZ!App Fon und Anrufliste“. TR-064 muss unter *Heimnetz →
-  Netzwerk → Netzwerkeinstellungen* erlaubt sein.
-- **Bibliothek:** `fritzconnection` (Python, in Debian als `python3-fritzconnection`)
-  übernimmt SOAP und Anmeldung [16, 17]. Die Namen der Dienste prüft man auf der
-  eigenen Box mit `fritzconnection -a fritz.box -s` [17]. Bei manchen Modellen
-  heißen sie anders [17].
-- **Alternative für Anrufereignisse:** der Callmonitor auf TCP-Port 1012
-  (einschalten mit `#96*5*`) liefert `RING/CALL/CONNECT/DISCONNECT` [18]. Wir
-  brauchen ihn nicht, weil baresip die Anrufe selbst meldet.
+- **Downloading recordings:** `Path` points to
+  `/download.lua?path=/data/tam/rec/rec.0.NNN` [14]. The download needs the session ID
+  (`sid`). It is contained in the URL that `GetMessageList` returns. That is a
+  conclusion from the structure of these URLs, not officially documented.
+- **Format of the recordings: open.** The push service sends answering machine messages
+  as WAV [15]. According to a forum post, the files on the box have a different format
+  (Speex is mentioned, unconfirmed) [15]. Omafon plays WAV directly and converts
+  everything else with `ffmpeg`. If neither works, the phone says
+  „Abspielen geht leider nicht“ (“playing doesn’t work, unfortunately”).
+- **Access:** a dedicated Fritz!Box user with only the right “voice messages, fax
+  messages, FRITZ!App Fon and call list”. TR-064 must be allowed under *Home Network →
+  Network → Network Settings*.
+- **Library:** `fritzconnection` (Python, in Debian as `python3-fritzconnection`) handles
+  SOAP and authentication [16, 17]. Check the service names on your own box with
+  `fritzconnection -a fritz.box -s` [17]. On some models they are named differently [17].
+- **Alternative for call events:** the call monitor on TCP port 1012 (enable with
+  `#96*5*`) delivers `RING/CALL/CONNECT/DISCONNECT` [18]. We don’t need it because
+  baresip reports the calls itself.
 
-## 3. DECT-Module für Eigenbauten
+## 3. DECT modules for DIY builds
 
-| Modul | Was es ist | Zulassung | Bewertung |
+| Module | What it is | Approval | Assessment |
 |---|---|---|---|
-| Dialog/Renesas **SC14CVMDECT** („Cordless Voice Module“) | Funk und Basisband, GAP-Protokollstapel, Steuerung per Host-Schnittstelle [8, 9] | EU-DECT (ETSI), FCC, J-DECT vorzertifiziert [8]. Laut Hersteller nur für Handteile [8]. **Mit anderer als der Standard-Software muss das Endgerät neu zertifiziert werden** [8] | Einziges halbwegs offen dokumentiertes Modul. Unterlagen 2011–2015, Liefersituation unklar [10] |
-| DECT-ULE-Module | Datenfunk für Sensoren | – | keine Sprach-Handteile |
-| DECT NR+ (z. B. Nordic nRF91-Serie) | DECT-2020, Datenfunk | – | nicht GAP-kompatibel, keine Sprache zur Fritz!Box [7] |
+| Dialog/Renesas **SC14CVMDECT** (“Cordless Voice Module”) | radio and baseband, GAP protocol stack, control via a host interface [8, 9] | EU DECT (ETSI), FCC, J-DECT pre-certified [8]. According to the manufacturer only for handsets [8]. **With software other than the standard software, the end device must be re-certified** [8] | the only somewhat openly documented module. Documents 2011–2015, availability unclear [10] |
+| DECT ULE modules | data radio for sensors | – | no voice handsets |
+| DECT NR+ (e.g. Nordic nRF91 series) | DECT-2020, data radio | – | not GAP-compatible, no voice to the Fritz!Box [7] |
 
-**Ergebnis:** Es gibt zugelassene Module, aber keine Bastler-taugliche Kette aus
-Modul, Entwicklungsboard und Doku, die heute sicher lieferbar ist. Dazu kommen
-HF-Layout, Antenne und die Frage der Konformität des Endgeräts.
+**Result:** there are approved modules, but no maker-friendly chain of module,
+development board and documentation that is reliably available today. Add RF layout,
+antenna and the question of the end device’s conformity.
 
-## 4. Zulassung (Funkanlagengesetz / RED)
+## 4. Approval (Radio Equipment Act / RED)
 
-- Das FuAG regelt das **Bereitstellen auf dem Markt „im Rahmen einer
-  Geschäftstätigkeit“** und das Inverkehrbringen. Die Pflichten (Konformitäts-
-  erklärung, CE, technische Unterlagen) treffen den Hersteller [19].
-- Ob ein **rein privater Einzelbau** ohne Weitergabe darunter fällt, geben die
-  Gesetzestexte nicht eindeutig her [19]. **Offene Frage** (BNetzA oder
-  Fachanwalt).
-- **WLAN-Weg:** Das Funkmodul des Pi Zero 2 W bleibt unverändert mit seiner
-  Platinenantenne. Der bekannte Umbau auf eine externe Antenne (U.FL) **hebt die
-  Funkzulassung auf** [20]. Deshalb keine externe Antenne. Ist die WLAN-Abdeckung
-  schwach, hilft ein Fritz!Repeater.
-- **DECT-Weg:** eigene Firmware auf dem Modul bedeutet Neuzertifizierung [8]. Auch
-  ein privater Weiterverkauf oder eine Weitergabe machte einen zum Hersteller [19].
+- The German Radio Equipment Act (FuAG) governs **making available on the market “in
+  the course of a commercial activity”** and placing on the market. The obligations
+  (declaration of conformity, CE, technical documentation) fall on the manufacturer [19].
+- Whether a **purely private one-off build** without passing it on is covered is not
+  clear from the legal texts [19]. **Open question** (BNetzA or a specialist lawyer).
+- **Wi-Fi path:** the radio module of the Pi Zero 2 W stays unchanged with its PCB
+  antenna. The well-known modification to an external antenna (U.FL) **voids the radio
+  approval** [20]. Hence no external antenna. If the Wi-Fi coverage is weak, a
+  Fritz!Repeater helps.
+- **DECT path:** custom firmware on the module means re-certification [8]. Even a
+  private resale or passing it on would make you the manufacturer [19].
 
-## 5. Andere Wege, ehrlich genannt
+## 5. Other options, named honestly
 
-- **Fertiges Senioren-DECT-Telefon an der Fritz!Box:** Händler beschreiben z. B. das
-  Gigaset E560A mit „sprechenden Tasten“ und SOS-Taste [21]. Die eigene Basis hängt
-  **analog** an der Fritz!Box (FON-Anschluss), dann gehen alle Funktionen des
-  Herstellers [22]. Die Sprachansage der Tasten habe ich in einer Herstellerquelle
-  nicht bestätigt gefunden. Ansage von Namen, Uhrzeit und AB-Nachrichten,
-  Sprachwahl und Notrufkette fehlen.
-  *Gut als Vergleich und als Notfall-Ersatzgerät, nicht als Ersatz für Omafon.*
-- **Fritz!App Fon auf einem Smartphone** mit Bildschirmleser: günstig, aber für
-  fast Blinde ohne Smartphone-Erfahrung zu komplex.
-- **Pi plus Bluetooth zu einem DECT-Handteil:** Bluetooth gibt es nur bei wenigen
-  Modellen, oft eingeschränkt [6]. Zwei Geräte, zwei Akkus, mehr Fehlerquellen.
+- **A ready-made senior DECT phone on the Fritz!Box:** dealers describe e.g. the
+  Gigaset E560A with “talking keys” and an SOS key [21]. Its own base is connected
+  **analog** to the Fritz!Box (FON port), then all of the manufacturer’s functions work
+  [22]. I could not confirm the spoken key announcement in a manufacturer source.
+  Announcing names, time and answering machine messages, voice dialing and the
+  emergency chain are missing.
+  *Good as a comparison and as an emergency backup device, not as a replacement for
+  Omafon.*
+- **Fritz!App Fon on a smartphone** with a screen reader: cheap, but too complex for
+  almost blind people without smartphone experience.
+- **Pi plus Bluetooth to a DECT handset:** Bluetooth only exists on a few models, often
+  limited [6]. Two devices, two batteries, more sources of error.
 
-## 6. Bewertung
+## 6. Assessment
 
-| | **A: WLAN-SIP mit Pi Zero 2 W** (empfohlen) | **B: Eigenbau-DECT-Handteil** | *Vergleich: fertiges Senioren-DECT* |
+| | **A: Wi-Fi SIP with Pi Zero 2 W** (recommended) | **B: DIY DECT handset** | *Comparison: ready-made senior DECT* |
 |---|---|---|---|
-| **Aufwand** | Mittel. Software steht (baresip, TR-064, Simulator, Tests). Hardware = Mobilfunk-Variante ohne Modem plus Ladeschale | Sehr hoch. Modulbeschaffung (B2B), Host-Protokoll, HF-Layout, Antenne; Pi trotzdem nötig | Keiner |
-| **Zulassung** | Unkritisch, solange das Pi-Funkmodul unverändert bleibt (keine externe Antenne) [20] | Neuzertifizierung bei eigener Firmware [8]; offen für Einzelbau [19] | CE vorhanden |
-| **Audioqualität** | Gut. Codecs G.722 (HD) und G.711. Hängt an der WLAN-Qualität; ab ca. −67 dBm stabil, darunter Aussetzer möglich (Erfahrungswert, ungeprüft) | DECT ist sehr robust gegen Störungen; HD nur mit CAT-iq, mit GAP-Fremdgerät unsicher [6] | Gut, Verstärkerfunktion für Hörgeschädigte |
-| **Akkulaufzeit** | Schwachpunkt: ca. 14–19 h Bereitschaft mit 3000 mAh (Rechnung in festnetz-hardware.md); muss täglich in die Schale | Funkteil sparsam, aber der Pi frisst dieselbe Energie, also **kaum besser als A** | Tage |
-| **Kosten (Material)** | ca. 150–190 € | Modul plus Entwicklungsboard unklar (vermutlich deutlich teurer), dazu der Rest von A | ca. 50–90 € |
-| **Funktionen für AMD** | Alles aus Omafon: Ziffern-, Namens- und Uhrzeitansage, AB vorlesen, Sprachwahl, Notrufkette | wie A | Tastenansage (laut Händler), SOS-Taste |
+| **Effort** | Medium. The software exists (baresip, TR-064, simulator, tests). Hardware = mobile variant without modem plus cradle | Very high. Module sourcing (B2B), host protocol, RF layout, antenna; the Pi is still needed | none |
+| **Approval** | uncritical as long as the Pi’s radio module stays unchanged (no external antenna) [20] | re-certification with custom firmware [8]; open for a one-off build [19] | CE present |
+| **Audio quality** | Good. Codecs G.722 (HD) and G.711. Depends on the Wi-Fi quality; stable from about −67 dBm, below that dropouts are possible (experience, unverified) | DECT is very robust against interference; HD only with CAT-iq, uncertain with a third-party GAP device [6] | good, amplifier function for the hearing impaired |
+| **Battery life** | Weak point: approx. 14–19 h standby with 3000 mAh (calculation in festnetz-hardware.md); must go into the cradle daily | the radio part is frugal, but the Pi eats the same energy, so **hardly better than A** | days |
+| **Cost (material)** | approx. €150–190 | module plus development board unclear (probably much more expensive), plus the rest of A | approx. €50–90 |
+| **Functions for AMD** | everything from Omafon: digit, name and time announcements, reading out the answering machine, voice dialing, emergency chain | like A | key announcement (according to the dealer), SOS key |
 
-### Empfehlung
+### Recommendation
 
-**Weg A.** Er nutzt die vorhandene Software fast unverändert, braucht keine eigene
-Funkzulassung und kostet weniger als die Mobilfunk-Variante. Den Akkunachteil
-fängt die Ladeschale auf. Das Telefon „wohnt“ dort, nimmt Anrufe beim Abheben an
-und legt beim Einstellen auf. Ein fertiges Senioren-DECT-Telefon an einem zweiten
-FON-Anschluss der Fritz!Box ist ein sinnvolles **Ersatzgerät**, falls Omafon
-ausfällt.
+**Option A.** It uses the existing software almost unchanged, needs no radio approval
+of its own and costs less than the mobile variant. The cradle compensates for the
+battery drawback. The phone “lives” there, answers calls when lifted and hangs up when
+put back. A ready-made senior DECT phone on a second FON port of the Fritz!Box is a
+sensible **backup device** in case Omafon fails.
 
-## 7. Was in der Fritz!Box einzurichten ist
+## 7. What to set up in the Fritz!Box
 
-1. *Telefonie → Telefoniegeräte → Neues Gerät → Telefon → LAN/WLAN (IP-Telefon)*,
-   Name „Omafon“. Benutzername und Kennwort in `config.yaml` unter `sip:` eintragen.
-2. Ausgehende Rufnummer und die Rufnummern festlegen, auf die Omafon klingeln soll.
-3. *System → FRITZ!Box-Benutzer*: Benutzer „omafon“ nur mit dem Recht
-   „Sprachnachrichten, Faxnachrichten, FRITZ!App Fon und Anrufliste“, in
-   `config.yaml` unter `fritz:` eintragen.
-4. *Heimnetz → Netzwerk → Netzwerkeinstellungen*: „Zugriff für Anwendungen zulassen“
-   (TR-064) an.
-5. Anrufbeantworter einschalten. Ansagezeit so lang, dass Oma rechtzeitig am
-   Telefon ist (z. B. 30 s).
-6. *Telefonie → Wählregeln*: prüfen, dass 110 und 112 über das Festnetz gehen
-   [3, 23]. Laut Foren ist das voreingestellt, aber keine Garantie [23].
-7. WLAN 2,4 GHz an. Omafon nicht ins Gastnetz.
+1. *Telephony → Telephony Devices → New Device → Telephone → LAN/WLAN (IP phone)*,
+   name “Omafon”. Enter user name and password in `config.yaml` under `sip:`.
+2. Set the outgoing number and the numbers Omafon should ring for.
+3. *System → FRITZ!Box Users*: user “omafon” with only the right “voice messages, fax
+   messages, FRITZ!App Fon and call list”, enter it in `config.yaml` under `fritz:`.
+4. *Home Network → Network → Network Settings*: “Allow access for applications”
+   (TR-064) on.
+5. Switch on the answering machine. Make the greeting delay long enough for grandma to
+   reach the phone in time (e.g. 30 s).
+6. *Telephony → Dialing Rules*: check that 110 and 112 go via the landline [3, 23].
+   According to forums this is the default, but there is no guarantee [23].
+7. Wi-Fi 2.4 GHz on. Don’t put Omafon in the guest network.
 
-## Offene Fragen (auch im Pull Request)
+## Open questions (also in the pull request)
 
-1. **Fritz!Box-Modell und FRITZ!OS-Version?** Dienstnamen bei TR-064 und das
-   AB-Format können abweichen. Mit `fritzconnection -a fritz.box -s` auf dem Pi prüfen.
-2. **Format der AB-Aufnahmen** über `download.lua` (WAV oder anderes)? Erste
-   Nachricht herunterladen und mit `file` ansehen.
-3. **Notruf über das IP-Telefon:** Geht 112 wirklich über die Festnetzleitung, und
-   übermittelt der Anbieter die Adresse? Beim Anbieter nachfragen, Wählregel prüfen.
-   Nicht testweise 112 wählen.
-4. **Rechtslage Einzelbau** (FuAG/RED) für ein privat genutztes Gerät mit
-   unverändertem Pi-Funkmodul.
-5. **Freisprechen in der Schale** braucht Echounterdrückung. baresip hat dafür
-   Module (z. B. WebRTC-AEC); am echten Gerät prüfen.
-6. **baresip-Details:** Ob `stopringing` den baresip-eigenen Klingelton zuverlässig
-   stoppt und `netroam` nach einem WLAN-Wechsel neu registriert, lässt sich erst
-   am Pi prüfen.
+1. **Fritz!Box model and FRITZ!OS version?** TR-064 service names and the answering
+   machine format may differ. Check with `fritzconnection -a fritz.box -s` on the Pi.
+2. **Format of the answering machine recordings** via `download.lua` (WAV or something
+   else)? Download the first message and look at it with `file`.
+3. **Emergency calls via the IP phone:** does 112 really go via the landline, and does
+   the provider transmit the address? Ask the provider, check the dialing rule. Don’t
+   dial 112 as a test.
+4. **Legal situation of a one-off build** (FuAG/RED) for a privately used device with an
+   unchanged Pi radio module.
+5. **Hands-free in the cradle** needs echo cancellation. baresip has modules for that
+   (e.g. WebRTC AEC); check on the real device.
+6. **baresip details:** whether `stopringing` reliably stops baresip’s own ringtone and
+   `netroam` re-registers after a Wi-Fi change can only be checked on the Pi.
 
-## Quellen
+## Sources
 
-1. AVM-Hilfe: Connecting an IP Telephone to the FRITZ!Box (7590) – https://service.avm.de/help/en/FRITZ-Box-7590/019/hilfe_fon_howto_ip-telefon
-2. IP-Telefon an FRITZ!Box anmelden (Anleitung, PDF) – https://www.mikrocontroller.net/attachment/73061/IP-Telefon_an_FRITZ_Box_anmelden.PDF
-3. AVM-Hilfe 7590 (IP-Telefone nur Inland und Notruf ab Werk) – https://service.avm.de/help/en/FRITZ-Box-7590/015/hilfe_fon_howto_ip-telefon
-4. AVM/FRITZ! Schnittstellen für Entwickler (TR-064, X_AVM-DE_OnTel, X_AVM-DE_TAM) – https://fritz.com/en/pages/interfaces
-5. FRITZ! Knowledge Base: Funktionen mit Schnurlostelefonen (GAP) – https://fritz.com/en/apps/knowledge-base/FRITZ-Box-4690/40_Functions-and-features-that-can-be-used-with-cordless-phones
-6. ip-phone-forum.de: Gigaset E720 an Fritz!Box 7490 / Fremd-DECT – https://www.ip-phone-forum.de/threads/gigaset-e720-%C3%BCber-dect-an-fritz-box-7490.326322/ und https://www.ip-phone-forum.de/showthread.php?p=909633
-7. Wikipedia: DECT (DECT-2020 NR) – https://en.wikipedia.org/wiki/DECT ; FRITZ! Knowledge Base: GAP-Problemlösung – https://uk.fritz.com/service/knowledge-base/dok/FRITZ-Box-5490/40_Functions-and-features-that-can-be-used-with-cordless-phones/
+1. AVM help: Connecting an IP Telephone to the FRITZ!Box (7590) – https://service.avm.de/help/en/FRITZ-Box-7590/019/hilfe_fon_howto_ip-telefon
+2. IP-Telefon an FRITZ!Box anmelden (guide, PDF, German) – https://www.mikrocontroller.net/attachment/73061/IP-Telefon_an_FRITZ_Box_anmelden.PDF
+3. AVM help 7590 (IP phones domestic and emergency only by default) – https://service.avm.de/help/en/FRITZ-Box-7590/015/hilfe_fon_howto_ip-telefon
+4. AVM/FRITZ! interfaces for developers (TR-064, X_AVM-DE_OnTel, X_AVM-DE_TAM) – https://fritz.com/en/pages/interfaces
+5. FRITZ! Knowledge Base: functions with cordless phones (GAP) – https://fritz.com/en/apps/knowledge-base/FRITZ-Box-4690/40_Functions-and-features-that-can-be-used-with-cordless-phones
+6. ip-phone-forum.de: Gigaset E720 on Fritz!Box 7490 / third-party DECT – https://www.ip-phone-forum.de/threads/gigaset-e720-%C3%BCber-dect-an-fritz-box-7490.326322/ and https://www.ip-phone-forum.de/showthread.php?p=909633
+7. Wikipedia: DECT (DECT-2020 NR) – https://en.wikipedia.org/wiki/DECT ; FRITZ! Knowledge Base: GAP troubleshooting – https://uk.fritz.com/service/knowledge-base/dok/FRITZ-Box-5490/40_Functions-and-features-that-can-be-used-with-cordless-phones/
 8. Dialog Semiconductor: SC14CVMDECT SF Datasheet Rev. 3.0 (2015) – https://www.mouser.com/ds/2/713/sc14cvmdect_sf_datasheet_3.0_final_0-908537.pdf
 9. FCC ID Y82-SC14S, User Manual CVMDECT – https://fccid.io/Y82-SC14S/User-Manual/user-manual-CVMDECT-2324864
 10. Avnet Silica: Renesas Cordless Voice Module SC14CVMDECT (2018) – https://my.avnet.com/silica/products/new-products/npi/2018/dialog-smartbond-cvm/
 11. avmtools Wiki: Get-AvmOnTelCallList – https://github.com/chikenborgir/avmtools/wiki/Get-AvmOnTelCallList
-12. avmtools: TAM.ps1 (X_AVM-DE_TAM-Aktionen) – https://powershellgallery.com/packages/avmtools/3.148.44/Content/Functions/Generic/TAM.ps1
+12. avmtools: TAM.ps1 (X_AVM-DE_TAM actions) – https://powershellgallery.com/packages/avmtools/3.148.44/Content/Functions/Generic/TAM.ps1
 13. CNX Software: Raspberry Pi Zero 2 W power consumption – https://www.cnx-software.com/2021/12/09/raspberry-pi-zero-2-w-power-consumption/
-14. ioBroker-Forum: TR-064 Fritzbox Anrufbeantworter (Path rec.0.NNN) – https://forum.iobroker.net/topic/14288/tr-064-fritzbox-anrufbeantworter/20
-15. ip-phone-forum.de: Sprachnachrichten von der Box laden / Encoder – https://www.ip-phone-forum.de/threads/sprachnachrichten-von-der-box-laden.191564/ und https://www.ip-phone-forum.de/threads/fritz-box-anrufbeantworter-encoder-decoder.156186/
-16. Debian-Paket python3-fritzconnection – https://packages.debian.org/de/sid/all/python3-fritzconnection
-17. fritzconnection (GitHub, Doku) – https://github.com/kbr/fritzconnection ; MagicMirror-Forum (Dienstname je Modell) – https://forum.magicmirror.builders/post/12782
+14. ioBroker forum: TR-064 Fritzbox answering machine (path rec.0.NNN) – https://forum.iobroker.net/topic/14288/tr-064-fritzbox-anrufbeantworter/20
+15. ip-phone-forum.de: downloading voice messages from the box / encoder – https://www.ip-phone-forum.de/threads/sprachnachrichten-von-der-box-laden.191564/ and https://www.ip-phone-forum.de/threads/fritz-box-anrufbeantworter-encoder-decoder.156186/
+16. Debian package python3-fritzconnection – https://packages.debian.org/de/sid/all/python3-fritzconnection
+17. fritzconnection (GitHub, docs) – https://github.com/kbr/fritzconnection ; MagicMirror forum (service name per model) – https://forum.magicmirror.builders/post/12782
 18. fritzconnection: Call Monitoring – https://fritzconnection.readthedocs.io/en/1.9.1/sources/call_monitoring.html
-19. Funkanlagengesetz (FuAG) – https://www.gesetze-im-internet.de/fuag/__7.html ; IHK Nürnberg Merkblatt Funkanlagen 2023 – https://www.ihk-nuernberg.de/fileadmin/IHK_Nuernberg/Innovation-Technologie-Forschung/Dokumente/2023_MB_Funkanlagen_final.pdf
-20. Brian Dorey: Raspberry Pi Zero 2 W external antenna mod – https://www.briandorey.com/post/raspberry-pi-zero-2-w-external-antenna-mod ; Hinweis Zertifizierung: https://www.briandorey.com/post/raspberry-pi-zero-w-external-antenna-mod
-21. Händlerangaben Gigaset E560A (sprechende Tasten, SOS) – https://www.homeandsmart.de/dect-schnurlos-telefon-test-vergleich
-22. Gigaset E560A Bedienungsanleitung (SOS-Taste an der Basis, analoger Anschluss) – https://gse.gigaset.com/fileadmin/legacy-assets/CustomerCare/Manuals/E5x/E560A/A31008-M2745-B101-1-19_de_DE-LU.pdf
-23. ip-phone-forum.de: Notrufnummern in den Wählregeln – https://www.ip-phone-forum.de/threads/notrufnummern-aus-wahlregeln-entfernen.108934/latest ; o2 Community: Notruf 110/112 nicht möglich (7590) – https://hilfe.o2online.de/dsl-kabel-glasfaser-router-software-internet-telefonie-34/notruf-110-und-112-nicht-moeglich-486280
-24. baresip Quellcode: ctrl_tcp, menu (dial/accept/hangup/sndcode), Ereignisnamen – https://github.com/baresip/baresip/blob/main/modules/ctrl_tcp/ctrl_tcp.c , https://github.com/baresip/baresip/blob/main/modules/menu/static_menu.c , https://github.com/baresip/baresip/blob/main/src/bevent.c
+19. Radio Equipment Act (FuAG) – https://www.gesetze-im-internet.de/fuag/__7.html ; IHK Nürnberg fact sheet on radio equipment 2023 – https://www.ihk-nuernberg.de/fileadmin/IHK_Nuernberg/Innovation-Technologie-Forschung/Dokumente/2023_MB_Funkanlagen_final.pdf
+20. Brian Dorey: Raspberry Pi Zero 2 W external antenna mod – https://www.briandorey.com/post/raspberry-pi-zero-2-w-external-antenna-mod ; note on certification: https://www.briandorey.com/post/raspberry-pi-zero-w-external-antenna-mod
+21. Dealer information Gigaset E560A (talking keys, SOS) – https://www.homeandsmart.de/dect-schnurlos-telefon-test-vergleich
+22. Gigaset E560A user manual (SOS key on the base, analog connection) – https://gse.gigaset.com/fileadmin/legacy-assets/CustomerCare/Manuals/E5x/E560A/A31008-M2745-B101-1-19_de_DE-LU.pdf
+23. ip-phone-forum.de: emergency numbers in the dialing rules – https://www.ip-phone-forum.de/threads/notrufnummern-aus-wahlregeln-entfernen.108934/latest ; o2 Community: emergency 110/112 not possible (7590) – https://hilfe.o2online.de/dsl-kabel-glasfaser-router-software-internet-telefonie-34/notruf-110-und-112-nicht-moeglich-486280
+24. baresip source code: ctrl_tcp, menu (dial/accept/hangup/sndcode), event names – https://github.com/baresip/baresip/blob/main/modules/ctrl_tcp/ctrl_tcp.c , https://github.com/baresip/baresip/blob/main/modules/menu/static_menu.c , https://github.com/baresip/baresip/blob/main/src/bevent.c

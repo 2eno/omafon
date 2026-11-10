@@ -22,47 +22,47 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: requirements-dev.txt
-      - name: Abhängigkeiten installieren
+      - name: Install dependencies
         run: python -m pip install -r requirements-dev.txt
-      - name: Tests ohne Hardware
+      - name: Tests without hardware
         run: python -m unittest discover -s tests -v
 
   cad:
-    name: CAD – STL rendern
+    name: CAD – render STL
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: OpenSCAD installieren
+      - name: Install OpenSCAD
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends openscad fonts-liberation
           openscad --version
-      - name: Alle Druckteile rendern
+      - name: Render all printed parts
         shell: bash
         run: |
           set -euo pipefail
           SCAD=cad/omafon_tasten.scad
           OUT=stl
           mkdir -p "$OUT"
-          # Wunschschrift Atkinson Hyperlegible; fehlt sie, Fallback laut SCAD-Kommentar.
+          # Preferred font Atkinson Hyperlegible; if missing, fallback as per the SCAD comment.
           FONT=()
           if ! fc-list | grep -qi "Atkinson Hyperlegible"; then
-            echo "::warning::Atkinson Hyperlegible nicht installiert – rendere mit Liberation Sans Bold"
+            echo "::warning::Atkinson Hyperlegible not installed – rendering with Liberation Sans Bold"
             FONT=(-D 'schrift="Liberation Sans:style=Bold"')
           fi
-          render() {  # render <ziel ohne .stl> <-D ...>
+          render() {  # render <target without .stl> <-D ...>
             local name=$1; shift
             mkdir -p "$OUT/$(dirname "$name")"
             echo "::group::$name"
             openscad "${FONT[@]}" "$@" -o "$OUT/$name.stl" "$SCAD" 2>&1 | tee "$OUT/$name.log"
             echo "::endgroup::"
             if grep -E "^(ERROR|WARNING)" "$OUT/$name.log"; then
-              echo "::error::OpenSCAD meldet Fehler/Warnungen bei $name"; exit 1
+              echo "::error::OpenSCAD reports errors/warnings for $name"; exit 1
             fi
             test -s "$OUT/$name.stl"
             rm "$OUT/$name.log"
           }
-          kappe() {  # kappe <name> <-D ...>: einfarbig + Kappe/Zeichen für Mehrfarbdruck
+          kappe() {  # kappe <name> <-D ...>: single-color + cap/symbol for multi-color printing
             local name=$1; shift
             render "tasten/einfarbig/$name" "$@"
             render "tasten/zweifarbig/${name}_kappe" "$@" -D 'farbteil="kappe"'
@@ -76,7 +76,7 @@ jobs:
           for teil in anrufen auflegen nachricht info notruf; do
             kappe "$teil" -D "teil=\"$teil\""
           done
-          # Gehäuse und Ladeschale je Variante
+          # housing and cradle per variant
           for v in festnetz hybrid; do
             dir=$v
             for teil in pruefstueck deckel wanne tastengitter akkudeckel notrufklappe lautstaerke_plus lautstaerke_minus hoererkopf hoermuschel; do
@@ -86,12 +86,14 @@ jobs:
               SCAD=cad/omafon_ladeschale.scad render "ladeschale/$dir/$teil" -D "variante=\"$v\"" -D "teil=\"$teil\""
             done
           done
-          cp docs/druckteile.md "$OUT/LIESMICH.md"
+          cp docs/druckteile.md "$OUT/README.md"
+          cp docs/druckteile.de.md "$OUT/LIESMICH.md"
           ls -laR "$OUT"
       - uses: actions/upload-artifact@v4
         with:
           name: omafon-stl
           path: |
             stl/**/*.stl
+            stl/README.md
             stl/LIESMICH.md
           if-no-files-found: error

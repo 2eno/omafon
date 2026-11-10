@@ -1,8 +1,8 @@
-"""Spracherkennung: Namen (mit fester Wortliste, sehr treffsicher) und freies Diktat.
+"""Speech recognition: names (with a fixed word list, very accurate) and free dictation.
 
-Offline mit Vosk. Optional zusätzlich ein eigener Whisper-Server (remote_stt_url),
-der eine WAV-Datei per HTTP-POST bekommt und JSON {"text": "..."} zurückgibt.
-Fällt der Server aus, gilt das Vosk-Ergebnis.
+Offline with Vosk. Optionally also your own Whisper server (remote_stt_url)
+that receives a WAV file via HTTP POST and returns JSON {"text": "..."}.
+If the server fails, the Vosk result counts.
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ import wave
 
 log = logging.getLogger("omafon.stt")
 RATE = 16000
-CHUNK = 3200  # 0,1 s bei 16 kHz, 16 Bit
+CHUNK = 3200  # 0.1 s at 16 kHz, 16 bit
 
 
 class Recognizer:
@@ -35,7 +35,7 @@ class Recognizer:
         return self._model
 
     def unload(self) -> None:
-        """Gibt ~300 MB RAM frei, wenn länger nicht diktiert wird."""
+        """Frees ~300 MB of RAM when there has been no dictation for a while."""
         self._model = None
 
     async def _record(self, rec, max_s: float, silence_s: float, grammar: bool) -> tuple[str, bytes]:
@@ -56,7 +56,7 @@ class Recognizer:
                 pcm += data
                 s = array.array("h", data)
                 level = sum(abs(x) for x in s) / max(1, len(s))
-                noise = level if noise is None else min(noise * 1.01 + 1, level)  # Grundrauschen
+                noise = level if noise is None else min(noise * 1.01 + 1, level)  # background noise
                 if level > max(400, noise * 3):
                     last_voice, heard = time.monotonic(), True
                 if rec.AcceptWaveform(data):
@@ -93,7 +93,7 @@ class Recognizer:
                 text = await asyncio.get_running_loop().run_in_executor(
                     None, self._remote, pcm) or text
             except Exception as e:
-                log.warning("Whisper-Server nicht erreichbar, nutze Vosk: %s", e)
+                log.warning("Whisper server not reachable, using Vosk: %s", e)
         return tidy(text)
 
     def _remote(self, pcm: bytes) -> str:
@@ -110,7 +110,7 @@ class Recognizer:
 
 
 def tidy(text: str) -> str:
-    """Vosk liefert klein und ohne Satzzeichen: ersten Buchstaben groß, Punkt ans Ende."""
+    """Vosk returns lowercase without punctuation: capitalize the first letter, add a period."""
     text = " ".join(text.split())
     if not text:
         return ""
@@ -119,7 +119,7 @@ def tidy(text: str) -> str:
 
 
 class SimRecognizer:
-    """Gibt vorher eingereihte Antworten zurück (Tests, PC-Simulation)."""
+    """Returns previously queued answers (tests, PC simulation)."""
 
     def __init__(self):
         self.answers: asyncio.Queue[str] = asyncio.Queue()

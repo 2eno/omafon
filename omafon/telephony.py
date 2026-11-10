@@ -1,23 +1,23 @@
-"""Telefonie-Schnittstelle: alles, was Phone vom Netz braucht.
+"""Telephony interface: everything Phone needs from the network.
 
-Phone spricht nur mit einem TelephonyBackend. Welches Backend läuft, steht in
-config.yaml unter ``backend``:
+Phone only talks to a TelephonyBackend. Which backend runs is set in
+config.yaml under ``backend``:
 
-  sip      Festnetz über die Fritz!Box als IP-Telefon (baresip, omafon/sip.py)
-  hybrid   Fritz!Box zu Hause + Mobilfunk unterwegs (omafon/hybrid.py); der
-           Mobilfunkteil ist omafon/modem.py (SIM7600, AT-Befehle). Ein reines
-           Handy ist keine eigene Variante mehr.
+  sip      landline via the Fritz!Box as an IP phone (baresip, omafon/sip.py)
+  hybrid   Fritz!Box at home + mobile network on the go (omafon/hybrid.py); the
+           mobile part is omafon/modem.py (SIM7600, AT commands). A pure
+           mobile phone is no longer a variant of its own.
 
-Ereignisse an Phone (ModemEvent.kind):
-  ring        eingehender Anruf klingelt (wiederholt, solange es klingelt)
-  clip        Rufnummer des Anrufers (data = Nummer, "" = unterdrückt)
-  call_begin  Gespräch steht
-  call_end, no_carrier, busy, no_answer, missed   Gespräch/Versuch beendet
-  sms         neue Nachricht abrufbar (data = Index für read_sms)
-  link_lost   Verbindung zum Netz/zur Fritz!Box weg (nur Backends mit link)
-  link_ok     Verbindung wieder da
-              Bei beiden darf data einen Schlüssel aus phone.P nennen, dann sagt
-              Phone diesen Text (z. B. "mode_home", "no_network").
+Events to Phone (ModemEvent.kind):
+  ring        incoming call is ringing (repeated while it rings)
+  clip        caller's number (data = number, "" = withheld)
+  call_begin  call is connected
+  call_end, no_carrier, busy, no_answer, missed   call/attempt ended
+  sms         new message available (data = index for read_sms)
+  link_lost   connection to the network/Fritz!Box lost (only backends with link)
+  link_ok     connection back
+              For both, data may name a key from phone.P; Phone then says
+              that text (e.g. "mode_home", "no_network").
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ from dataclasses import dataclass
 
 @dataclass
 class ModemEvent:
-    kind: str          # siehe Moduldoku
+    kind: str          # see module docs
     data: str = ""
 
 
@@ -35,27 +35,27 @@ class ModemError(Exception):
     pass
 
 
-# Neutrale Namen für neuen Code; die alten bleiben für bestehende Importe gültig.
+# Neutral names for new code; the old ones stay valid for existing imports.
 TelephonyEvent = ModemEvent
 TelephonyError = ModemError
 
 
 class TelephonyBackend:
-    """Basisklasse. Pflicht: start, dial, answer, hangup, dtmf, signal, alive.
+    """Base class. Required: start, dial, answer, hangup, dtmf, signal, alive.
 
-    Optionale Fähigkeiten haben hier sichere Standardwerte, damit Phone ohne
-    Fallunterscheidung auskommt:
-      - SMS/Nachrichten: stored_indices() leer, send_sms() wirft ModemError
-      - Ortung: gps_position() liefert None
-      - Verbindung: online ist immer True, status_words() None (= Phone nutzt CSQ)
+    Optional capabilities have safe defaults here so Phone needs no special
+    cases:
+      - SMS/messages: stored_indices() empty, send_sms() raises ModemError
+      - location: gps_position() returns None
+      - connection: online is always True, status_words() None (= Phone uses CSQ)
     """
 
     name = "basis"
-    supports_sms = False         # Textnachrichten senden möglich?
-    has_link = False             # meldet link_lost/link_ok?
-    offline_key = "link_lost"    # P-Schlüssel der Ansage, wenn offline (Phone)
+    supports_sms = False         # can text messages be sent?
+    has_link = False             # reports link_lost/link_ok?
+    offline_key = "link_lost"    # P key of the announcement when offline (Phone)
 
-    # ---------------------------------------------------------------- Pflicht
+    # ---------------------------------------------------------------- required
     async def start(self) -> None:
         raise NotImplementedError
 
@@ -72,7 +72,7 @@ class TelephonyBackend:
         raise NotImplementedError
 
     async def signal(self) -> int | None:
-        """Empfangsqualität 0..31 (wie AT+CSQ), None = kein Netz."""
+        """Reception quality 0..31 (like AT+CSQ), None = no network."""
         raise NotImplementedError
 
     async def alive(self) -> bool:
@@ -84,14 +84,14 @@ class TelephonyBackend:
         return True
 
     def status_words(self) -> str | None:
-        """Eigene Ansage für die Info-Taste statt "Empfang gut" (None = Standard)."""
+        """Own announcement for the info key instead of "Empfang gut" (None = default)."""
         return None
 
     async def call_volume(self, level: int) -> None:
         return None
 
     def can_send_to(self, number: str) -> bool:
-        """Kann eine Textnachricht an diese Nummer gehen?"""
+        """Can a text message be sent to this number?"""
         return self.supports_sms
 
     async def send_sms(self, number: str, text: str) -> None:
@@ -115,11 +115,10 @@ BACKENDS = ("sip", "hybrid")
 
 def create_backend(cfg, events: asyncio.Queue, loop: asyncio.AbstractEventLoop,
                    sim: bool = False):
-    """Backend laut cfg.backend. sim=True: Simulator ohne Hardware/Netz.
+    """Backend according to cfg.backend. sim=True: simulator without hardware/network.
 
-    Rückgabe: (backend, simulator_steuerung). Die Steuerung hat inject_call,
-    inject_sms und inject – für die Simulator-Konsole und Tests.
-    """
+    Returns: (backend, simulator_control). The control has inject_call,
+    inject_sms and inject – for the simulator console and tests."""
     kind = getattr(cfg, "backend", "sip")
     if kind not in BACKENDS:
         raise ValueError(f"Unbekanntes backend '{kind}' – erlaubt: {', '.join(BACKENDS)}")

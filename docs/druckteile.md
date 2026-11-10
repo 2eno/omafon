@@ -1,195 +1,198 @@
-# Omafon – Druckteile und Zusammenbau
+# Omafon – printed parts and assembly
 
-Alle Teile sind parametrisch in OpenSCAD (`cad/`). Die CI rendert bei jedem Push
-das **komplette Druckpaket** als Artefakt `omafon-stl`. Die STL-Dateien liegen dort
-schon in Druckrichtung:
+*English · [Deutsch](druckteile.de.md)*
+
+All parts are parametric in OpenSCAD (`cad/`). On every push, CI renders the
+**complete print package** as the artifact `omafon-stl`. The STL files in it are
+already in print orientation (the folder and file names are German):
 
 ```
-tasten/einfarbig/            17 Tastenkappen (Farbwechsel oder einfarbig)
-tasten/zweifarbig/           dieselben Kappen als *_kappe.stl + *_zeichen.stl (Mehrmaterial)
-gehaeuse/festnetz/           Handteil 94 x 210 x 30 mm
-gehaeuse/hybrid/             Handteil 94 x 210 x 36 mm (Platz für den SIM7600-HAT)
-                             (Hörerkopf + Muschel stehen 21 mm über der Vorderseite)
-ladeschale/festnetz/         Ladeschale passend zum 30-mm-Handteil
-ladeschale/hybrid/           Ladeschale passend zum 36-mm-Handteil
+tasten/einfarbig/            17 key caps (color change or single color)
+tasten/zweifarbig/           the same caps as *_kappe.stl + *_zeichen.stl (multi-material)
+gehaeuse/festnetz/           handset 94 x 210 x 30 mm (landline)
+gehaeuse/hybrid/             handset 94 x 210 x 36 mm (room for the SIM7600 HAT)
+                             (head part + ear cup stand 21 mm above the front)
+ladeschale/festnetz/         cradle matching the 30 mm handset
+ladeschale/hybrid/           cradle matching the 36 mm handset
 ```
 
-![Handteil von vorn](../cad/gehaeuse_vorschau_vorn.png)
-![Handteil von hinten: Notrufklappe, Akkudeckel, Lautsprecher, Kodiernut, Ladekontakte](../cad/gehaeuse_vorschau_hinten.png)
+![Handset from the front](../cad/gehaeuse_vorschau_vorn.png)
+![Handset from the back: emergency cover, battery cover, speaker, coding groove, charging contacts](../cad/gehaeuse_vorschau_hinten.png)
 
-> **Stand:** Die Geometrie ist am Rechner geprüft: Kollisionen im Zusammenbau
-> (auch mit gedrückten Tasten und der Elektronik als Platzhalter), Überhänge,
-> Druckrichtung und fehlerfreies Rendern. **Gedruckt und anprobiert ist noch nichts.**
+> **Status:** the geometry has been checked on the computer: collisions in the
+> assembly (also with pressed keys and the electronics as placeholders), overhangs,
+> print orientation and error-free rendering. **Nothing has been printed or fitted yet.**
 >
-> **Reihenfolge:** erst das Prüfstück (Platte 0) und eine Tastenkappe, dann der
-> Rest – siehe [Reihenfolge](#reihenfolge).
+> **Order:** first the test piece (plate 0) and one key cap, then the rest – see
+> [Order](#order).
 
-## Druckaufträge nach Einstellungen
+## Print jobs by settings
 
-Alles, was mit denselben Slicer-Einstellungen gedruckt wird, steht in einer Gruppe.
-Innerhalb einer Gruppe sind die Teile nach Farbe auf **Druckplatten** verteilt, passend
-für ein Druckbett ab 220 × 220 mm. Die STL liegen schon richtig herum; im Slicer
-nur platzieren und, wo angegeben, um die Hochachse drehen – **nie kippen**. `<v>` = `festnetz` oder `hybrid`.
+Everything printed with the same slicer settings is in one group. Within a group the
+parts are distributed by color onto **build plates**, sized for a bed of 220 × 220 mm
+or more. The STLs are already the right way up; in the slicer only place them and, where
+stated, rotate them around the vertical axis – **never tilt them**. `<v>` = `festnetz` or
+`hybrid`.
 
-**Für alle Gruppen gilt:** keine Lochkompensation („Hole horizontal expansion“ = 0),
-die Maße enthalten das Spiel schon (Taster-Ausschnitt 14,1 mm, Teile 0,3 mm je Seite).
-Keine Stützen.
+**For all groups:** no hole compensation (“hole horizontal expansion” = 0); the
+dimensions already contain the clearance (switch cut-out 14.1 mm, parts 0.3 mm per side).
+No supports.
 
-### Gruppe 1 – PETG, 0,2 mm (Gehäuse und Ladeschale)
+### Group 1 – PETG, 0.2 mm (housing and cradle)
 
-| Einstellung | Wert |
+| Setting | Value |
 |---|---|
 | Material | PETG |
-| Schichthöhe | **0,2 mm, auch die erste Lage** (Schalterplatten = 8 Lagen à 0,2 mm; andere Schichthöhen ergeben 1,4/1,8 mm, dann halten die Taster nicht) |
-| Wände / oben / unten | 4 Wände, 5 Lagen oben, 5 Lagen unten |
-| Füllung | 25 % Gyroid |
-| Stützen / Haftung | keine / kein Brim |
+| Layer height | **0.2 mm, including the first layer** (switch plates = 8 layers of 0.2 mm; other layer heights give 1.4/1.8 mm, and then the switches don’t hold) |
+| Walls / top / bottom | 4 walls, 5 top layers, 5 bottom layers |
+| Infill | 25 % gyroid |
+| Supports / adhesion | none / no brim |
 
-| Platte | Datei | Stück | Farbe | Hinweis |
+| Plate | File | Qty | Color | Note |
 |---|---|---|---|---|
-| **0 – zuerst** | `gehaeuse/<v>/pruefstueck.stl` | 1 | beliebig | ca. 20 min: Taster müssen fest einrasten, Einsatz einschmelzen, Lautstärketaste probestecken. Erst wenn das passt, weiterdrucken |
-| **A – dunkel** | `gehaeuse/<v>/deckel.stl` | 1 | dunkelgrau/schwarz | Kontrast zu den weißen Kappen. Schalterplatte für 16 Taster eingebaut, Hörer mit Ringmulde, LED-Loch, Mikrofon |
-| | `gehaeuse/<v>/tastengitter.stl` | 1 | wie Deckel | **optional:** 1,2 mm hohe Taststege, auf den Deckel kleben; gedrückte Kappen stoßen nicht an |
-| | `gehaeuse/<v>/lautstaerke_plus.stl` | 1 | dunkel | erhabenes Kreuz |
-| | `gehaeuse/<v>/lautstaerke_minus.stl` | 1 | dunkel | erhabener Balken |
-| **B – hell** | `gehaeuse/<v>/wanne.stl` | 1 | hellgrau/weiß | Notrufmulde mit Schalterplatte, Akkufach, Ladekontakte, Kodiernut |
-| | `gehaeuse/<v>/akkudeckel.stl` | 1 | wie Wanne | 2 Senkschrauben in 2,2-mm-Polstern |
-| | `gehaeuse/<v>/hoererkopf.stl` | 1 | hell (LED gut sichtbar) | 18 mm hohes Kopfteil: Ohr und Muschel liegen gut 3 mm höher als die höchste Taste. **Um 90° drehen** und längs neben den Akkudeckel legen (76 × 24 mm). Platte B gesamt ca. 207 mm breit |
-| **C – dunkel** | `ladeschale/<v>/schale.stl` | 1 | dunkel | Schacht, Trichter, Kodierrippe, Grill, USB-C-Halter (139 × 134 mm, Hybrid 139 × 140 mm, 58 mm hoch) |
-| | `ladeschale/<v>/kontakttraeger.stl` | 1 | beliebig | 5 Federkontakte, 2 Magnete |
-| **D** | `ladeschale/<v>/boden.stl` | 1 | beliebig | Gewichtskammer, Gummifüße (134 × 128 mm, Hybrid 134 × 134 mm) |
+| **0 – first** | `gehaeuse/<v>/pruefstueck.stl` | 1 | any | approx. 20 min: switches must snap in firmly, heat-set the insert, test-fit the volume key. Only continue printing once it fits |
+| **A – dark** | `gehaeuse/<v>/deckel.stl` | 1 | dark grey/black | contrast to the white caps. Built-in switch plate for 16 switches, earpiece with ring recess, LED hole, microphone |
+| | `gehaeuse/<v>/tastengitter.stl` | 1 | like the top | **optional:** 1.2 mm high tactile ridges, glued onto the top; pressed caps don’t touch them |
+| | `gehaeuse/<v>/lautstaerke_plus.stl` | 1 | dark | raised cross |
+| | `gehaeuse/<v>/lautstaerke_minus.stl` | 1 | dark | raised bar |
+| **B – light** | `gehaeuse/<v>/wanne.stl` | 1 | light grey/white | emergency recess with switch plate, battery bay, charging contacts, coding groove |
+| | `gehaeuse/<v>/akkudeckel.stl` | 1 | like the bottom shell | 2 countersunk screws in 2.2 mm pads |
+| | `gehaeuse/<v>/hoererkopf.stl` | 1 | light (LED clearly visible) | 18 mm high head part: ear and ear cup sit a good 3 mm higher than the highest key. **Rotate by 90°** and place it lengthwise next to the battery cover (76 × 24 mm). Plate B approx. 207 mm wide in total |
+| **C – dark** | `ladeschale/<v>/schale.stl` | 1 | dark | slot, funnel, coding rib, grille, USB-C holder (139 × 134 mm, hybrid 139 × 140 mm, 58 mm high) |
+| | `ladeschale/<v>/kontakttraeger.stl` | 1 | any | 5 spring contacts, 2 magnets |
+| **D** | `ladeschale/<v>/boden.stl` | 1 | any | weight chamber, rubber feet (134 × 128 mm, hybrid 134 × 134 mm) |
 
-### Gruppe 2 – PETG, 0,2 mm, stehend mit Brim
+### Group 2 – PETG, 0.2 mm, standing with brim
 
-Wie Gruppe 1, aber **Brim 5 mm**: Das Teil steht hochkant auf einer schmalen Kante.
+Like group 1, but **brim 5 mm**: the part stands upright on a narrow edge.
 
-| Platte | Datei | Stück | Farbe | Hinweis |
+| Plate | File | Qty | Color | Note |
 |---|---|---|---|---|
-| **E – rot** | `gehaeuse/<v>/notrufklappe.stl` | 1 | rot | Noppen außen = „hier ist der Notruf“; Raste seitlich, Scharnier oben – fällt von selbst zu |
+| **E – red** | `gehaeuse/<v>/notrufklappe.stl` | 1 | red | nubs outside = “this is the emergency button”; detent at the sides, hinge at the top – closes by itself |
 
-### Gruppe 3 – Tastenkappen, 0,12 mm
+### Group 3 – key caps, 0.12 mm
 
-| Einstellung | Wert |
+| Setting | Value |
 |---|---|
-| Material | PETG oder PLA |
-| Schichthöhe | **0,12 mm** (feine Kanten an den erhabenen Zeichen) |
-| Wände / Füllung | 3 Wände, 30 % Füllung |
-| Stützen / Haftung | keine / kein Brim; Oberseite oben |
+| Material | PETG or PLA |
+| Layer height | **0.12 mm** (fine edges on the raised symbols) |
+| Walls / infill | 3 walls, 30 % infill |
+| Supports / adhesion | none / no brim; top side up |
 
-17 Kappen: Ziffern 0–9, Stern, Raute, Nachricht, Info (weiß, Zeichen schwarz),
-Anrufen (gelb, Zeichen schwarz), Auflegen (schwarz, Zeichen weiß), Notruf (rot,
-Noppen weiß). **Erst eine Kappe drucken** und auf einen Taster stecken (Sitz:
-`stem_spiel` in `cad/omafon_tasten.scad`).
+17 caps: digits 0–9, star, hash, message, info (white, symbols black), call (yellow,
+symbol black), hang up (black, symbol white), emergency (red, nubs white). **Print one
+cap first** and put it on a switch (fit: `stem_spiel` in `cad/omafon_tasten.scad`).
 
-| Platte | Dateien | Wann |
+| Plate | Files | When |
 |---|---|---|
-| **F – Mehrmaterial** | `tasten/zweifarbig/*_kappe.stl` + passendes `*_zeichen.stl` je Kappe als ein Objekt mit zwei Körpern laden | Drucker mit mehreren Farben (AMS, MMU, IDEX): beste Lesbarkeit |
-| **F1 – weiß** | `tasten/einfarbig/` taste_0…9, taste_stern, taste_raute, nachricht, info | Ein-Düsen-Drucker. Nachricht und Info: Farbwechsel (M600) auf Höhe der Kappenoberkante. Ziffern sitzen in einer Mulde, dort das erhabene Zeichen danach mit Lackstift schwarz einfärben |
-| **F2 – gelb** | `tasten/einfarbig/anrufen.stl` | Hörersymbol danach schwarz einfärben |
-| **F3 – schwarz** | `tasten/einfarbig/auflegen.stl` | Balken danach weiß einfärben |
-| **F4 – rot** | `tasten/einfarbig/notruf.stl` | Noppen bleiben rot (fühlbar genügt) |
+| **F – multi-material** | load `tasten/zweifarbig/*_kappe.stl` + the matching `*_zeichen.stl` per cap as one object with two bodies | printers with several colors (AMS, MMU, IDEX): best legibility |
+| **F1 – white** | `tasten/einfarbig/` taste_0…9, taste_stern, taste_raute, nachricht, info | single-nozzle printers. Message and info: color change (M600) at the height of the cap top edge. Digits sit in a dish; color the raised symbol black afterwards with a paint marker |
+| **F2 – yellow** | `tasten/einfarbig/anrufen.stl` | color the handset symbol black afterwards |
+| **F3 – black** | `tasten/einfarbig/auflegen.stl` | color the bar white afterwards |
+| **F4 – red** | `tasten/einfarbig/notruf.stl` | the nubs stay red (feeling them is enough) |
 
-### Gruppe 4 – TPU 95A
+### Group 4 – TPU 95A
 
-| Einstellung | Wert |
+| Setting | Value |
 |---|---|
-| Material | TPU 95A (weich); notfalls PETG wie Gruppe 1 |
-| Schichthöhe | 0,2 mm |
-| Füllung | 100 % |
-| Geschwindigkeit | langsam, 20–25 mm/s; wenig Rückzug |
+| Material | TPU 95A (soft); PETG like group 1 if necessary |
+| Layer height | 0.2 mm |
+| Infill | 100 % |
+| Speed | slow, 20–25 mm/s; little retraction |
 
-| Platte | Datei | Stück | Farbe | Hinweis |
+| Plate | File | Qty | Color | Note |
 |---|---|---|---|---|
-| **G** | `gehaeuse/<v>/hoermuschel.stl` | 1 | dunkel | weicher Ring oben auf dem Hörerkopf: führt das Ohr und dichtet ab |
+| **G** | `gehaeuse/<v>/hoermuschel.stl` | 1 | dark | soft ring on top of the head part: guides the ear and seals |
 
-### Reihenfolge
+### Order
 
-Platte 0 (Prüfstück) und eine Kappe aus Gruppe 3 → A (Deckel) und Taster
-anprobieren → B, E, G → restliche Kappen → C, D (Ladeschale).
+Plate 0 (test piece) and one cap from group 3 → A (top) and test-fit the switches →
+B, E, G → remaining caps → C, D (cradle).
 
-### Allgemein
+### General
 
-- **Material:** PETG ist zäher als PLA und verträgt Wärme in der Hand und am Fenster.
-- **Bettgröße:** Deckel und Wanne sind 210 mm lang. Das passt auf Drucker ab
-  220 × 220 mm bzw. auf 250 × 210 mm längs.
+- **Material:** PETG is tougher than PLA and tolerates warmth in the hand and on a
+  windowsill.
+- **Bed size:** top and bottom shell are 210 mm long. That fits printers from
+  220 × 220 mm or 250 × 210 mm lengthwise.
 
-## Kaufteile für die Mechanik
+## Purchased parts for the mechanics
 
-| Teil | Stück | Wo |
+| Part | Qty | Where |
 |---|---|---|
-| Gewindeeinsatz M2,5 × 3,5 (Einschmelzmutter, Ø 3,6 mm Loch) | 6 (+1 Prüfstück) | 4 im Deckel, 2 in den Akkudeckel-Domen |
-| Zylinderschraube M2,5 × **25** (Festnetz) bzw. × **30** (Hybrid) | 4 | Gehäuse, von hinten (Senkung so tief, dass 3 mm im Einsatz greifen) |
-| Senkschraube M2,5 × 6 | 2 | Akkudeckel |
-| Schraube M2,5 × 6 (selbstformend) oder Abstandsbolzen | 4 | Pi Zero 2 W |
-| Filament 1,75 mm, 32 mm lang | 1 | Scharnierstift Notrufklappe |
-| Magnet 5 × 1 mm + Reedkontakt (Glas, 2 × 14 mm) oder Hallschalter | je 1 | Klappenschalter (GPIO 23) |
-| Taster im Cherry-MX-Format | 17 | 16 Tasten + Notruf |
-| Kurzhubtaster 6 × 6 mm + Lochraster 14 × 16 mm | je 2 | Lautstärke |
-| Messingscheibe Ø 5 × 1 mm | 5 | Ladekontakte am Handteil |
-| Stahlscheibe Ø 8 × 1,5 mm | 2 | Gegenstück zu den Magneten der Schale |
-| Federkontakt (Pogo-Pin) Ø 2 mm, Magnet 8 × 3 mm | 5 / 2 | Ladeschale |
-| Gummifüße Ø 10, Stahlscheiben 150–250 g, M3 × 8 | 4 / – / 2 | Ladeschale |
+| Threaded insert M2.5 × 3.5 (heat-set nut, Ø 3.6 mm hole) | 6 (+1 test piece) | 4 in the top, 2 in the battery cover bosses |
+| Cylinder head screw M2.5 × **25** (landline) or × **30** (hybrid) | 4 | housing, from the back (counterbore deep enough that 3 mm engage in the insert) |
+| Countersunk screw M2.5 × 6 | 2 | battery cover |
+| Screw M2.5 × 6 (thread-forming) or standoffs | 4 | Pi Zero 2 W |
+| Filament 1.75 mm, 32 mm long | 1 | hinge pin of the emergency cover |
+| Magnet 5 × 1 mm + reed contact (glass, 2 × 14 mm) or Hall switch | 1 each | cover switch (GPIO 23) |
+| Cherry MX format switches | 17 | 16 keys + emergency |
+| Tactile switch 6 × 6 mm + perfboard 14 × 16 mm | 2 each | volume |
+| Brass disc Ø 5 × 1 mm | 5 | charging contacts on the handset |
+| Steel disc Ø 8 × 1.5 mm | 2 | counterpart to the cradle magnets |
+| Spring contact (pogo pin) Ø 2 mm, magnet 8 × 3 mm | 5 / 2 | cradle |
+| Rubber feet Ø 10, steel discs 150–250 g, M3 × 8 | 4 / – / 2 | cradle |
 
-Elektronik siehe [stueckliste.md](stueckliste.md), Anschlüsse in
+Electronics see [stueckliste.md](stueckliste.md), connections in
 [verkabelung.md](verkabelung.md).
 
-## Zusammenbau Handteil
+## Handset assembly
 
-1. **Einsätze** mit dem Lötkolben (ca. 220 °C) einschmelzen: 4 in die Dome des
-   Deckels, 2 von außen in die Akkudeckel-Dome der Wanne.
-2. **Taster:** 16 Taster von vorn in den Deckel klipsen (sie rasten in der 1,6-mm-
-   Platte ein). Optional das Tastengitter vorn aufkleben. Kappen erst ganz am
-   Schluss aufstecken.
-3. Hörkapsel, Mikrofon (mit Dichtring/Filz) und LED in die Halter im Deckel kleben.
-   LED von unten ins Lichtrohr des Hörerkopfs stecken (Kopf schaut oben heraus,
-   Beine verlängern), Drähte durch das LED-Loch im Deckel. Hörerkopf mit 2K-Kleber
-   auf den Deckel kleben; der Stummel des Schallrohrs zentriert ihn in der
-   Ringmulde über dem Hörer. Hörmuschel oben in die Mulde des Kopfs kleben.
-   Hybrid: GNSS-Antenne in den Rahmen oben rechts.
-4. **Wanne:** Notruftaster von außen in die Mulde klipsen, Notrufkappe aufstecken.
-   Reedkontakt in den Kanal neben der Mulde schieben, Magnet in die Klappe kleben
-   (Tasche innen, Seite zum Reedkontakt), Klappe mit dem Filamentstift einhängen.
-   Stift an beiden Enden kurz anschmelzen. Die Klappe rastet seitlich leicht ein.
-5. Messingscheiben in die Unterkante kleben, Litzen durch die Löcher (von links:
-   +5 V, GND, GND, LS+, LS−). Stahlscheiben daneben einkleben.
-6. Lautsprecher in den Ring über dem Gitter kleben. Lautstärketasten von innen
-   einsetzen, Lochraster-Platinen mit den 6×6-Tastern in die Schienen schieben.
-7. Pi auf die Abstandshalter schrauben (Hybrid: HAT aufstecken,
-   Schaumstoffpad zum Akku). Kleine Platinen mit Klebepads und Kabelbindern ins
-   Feld rechts neben dem Akku.
-8. Akku einlegen, Akkudeckel mit 2 Senkschrauben schließen.
-9. Deckel aufsetzen (Falz zentriert), 4 Schrauben von hinten. Tastenkappen
-   aufstecken.
+1. **Inserts:** heat-set them with a soldering iron (approx. 220 °C): 4 into the bosses
+   of the top, 2 from the outside into the battery cover bosses of the bottom shell.
+2. **Switches:** clip 16 switches into the top from the front (they snap into the
+   1.6 mm plate). Optionally glue the tactile grid on the front. Only put the caps on
+   at the very end.
+3. Glue the earpiece, microphone (with sealing ring/felt) and LED into the holders in the
+   top. Push the LED from below into the light pipe of the head part (the head looks out
+   at the top, extend the legs), wires through the LED hole in the top. Glue the head
+   part onto the top with 2-part adhesive; the stub of the sound tube centers it in the
+   ring recess above the earpiece. Glue the ear cup into the recess on top of the head.
+   Hybrid: GNSS antenna into the frame at the top right.
+4. **Bottom shell:** clip the emergency switch into the recess from the outside, put on
+   the emergency cap. Slide the reed contact into the channel next to the recess, glue
+   the magnet into the cover (pocket inside, side towards the reed contact), hang the
+   cover with the filament pin. Briefly melt both ends of the pin. The cover snaps in
+   lightly at the sides.
+5. Glue the brass discs into the bottom edge, wires through the holes (from the left:
+   +5 V, GND, GND, SPK+, SPK−). Glue the steel discs in next to them.
+6. Glue the speaker into the ring above the grille. Insert the volume keys from the
+   inside, slide the perfboards with the 6×6 switches into the rails.
+7. Screw the Pi onto the standoffs (hybrid: plug on the HAT, foam pad towards the
+   battery). Small boards with adhesive pads and cable ties into the area to the right
+   of the battery.
+8. Insert the battery, close the battery cover with 2 countersunk screws.
+9. Put on the top (the lip centers it), 4 screws from the back. Put on the key caps.
 
-## Zusammenbau Ladeschale
+## Cradle assembly
 
-1. Federkontakte in den Kontaktträger pressen (Markierung = Kontakt 1, +5 V),
-   Magnete einkleben (Polung so, dass sie die Stahlscheiben anziehen).
-2. Kontaktträger in die Tasche am Schachtboden kleben.
-3. Lautsprecher von unten an den Grill kleben, USB-C-Platine in die Nut schieben.
-4. Stahlscheiben in die Gewichtskammer des Bodens kleben, Boden mit 2 × M3
-   anschrauben, Gummifüße aufkleben.
+1. Press the spring contacts into the contact carrier (mark = contact 1, +5 V), glue in
+   the magnets (polarity such that they attract the steel discs).
+2. Glue the contact carrier into the pocket in the slot floor.
+3. Glue the speaker to the grille from below, slide the USB-C board into the groove.
+4. Glue steel discs into the weight chamber of the base, screw on the base with
+   2 × M3, stick on the rubber feet.
 
-## Anpassen
+## Adjusting
 
-- Gemeinsame Maße von Handteil und Schale (Breite, Länge, Dicke je Variante,
-  Kontakte, Kodierung) stehen in **`cad/omafon_masse.scad`**. Wer dort etwas ändert,
-  muss Gehäuse **und** Schale neu exportieren.
-- Einbauteile (Hörkapsel, Mikrofon, Lautsprecher, Akku, Einsätze) sind oben in
-  `cad/omafon_gehaeuse.scad` einstellbar, z. B.
+- Shared dimensions of handset and cradle (width, length, thickness per variant,
+  contacts, coding) are in **`cad/omafon_masse.scad`**. Anyone changing something there
+  has to re-export the housing **and** the cradle.
+- Built-in parts (earpiece, microphone, speaker, battery, inserts) can be set at the top
+  of `cad/omafon_gehaeuse.scad`, e.g.
   `openscad -D 'variante="hybrid"' -D 'teil="wanne"' -D 'ls_d=31.6' …`.
-- Kappe zu stramm auf dem Taster: `stem_spiel` in `omafon_tasten.scad`.
+- Cap too tight on the switch: `stem_spiel` in `omafon_tasten.scad`.
 
-## Offene Punkte
+## Open points
 
-1. Nichts davon ist gedruckt. Toleranzen (Spiel 0,3 mm, Taster-Ausschnitt 14,1 mm,
-   Kappenstößel) mit dem Prüfstück und einer Kappe am eigenen Drucker prüfen.
-   Anpassbar über `spalt`, `mx_ausschnitt` (Gehäuse) und `stem_spiel` (Kappen).
-2. Das Handteil ist mit 94 × 210 mm groß. Das folgt aus dem 24-mm-Raster der Tasten.
-   Kleiner geht nur mit engerem Raster (`raster` in `omafon_tasten.scad`).
-   Schwerer zu treffen, aber leichter in der Hand. Gewicht geschätzt 250–350 g.
-3. Akkumaße sind Beispiele (3000 mAh 60 × 75 × 10, 5000 mAh 60 × 70 × 12). Den
-   echten Akku nachmessen und `AK` anpassen.
-4. Der Notruf sitzt hinten (wie bei Seniorenhandys üblich). Liegt das Telefon auf
-   dem Rücken, muss Oma es erst anheben. In der Schale ist die Klappe von hinten
-   oben erreichbar. Mit ihr ausprobieren.
+1. None of this has been printed. Check the tolerances (clearance 0.3 mm, switch cut-out
+   14.1 mm, cap stem) with the test piece and one cap on your own printer. Adjustable
+   via `spalt`, `mx_ausschnitt` (housing) and `stem_spiel` (caps).
+2. At 94 × 210 mm the handset is large. That follows from the 24 mm key grid. Smaller
+   is only possible with a tighter grid (`raster` in `omafon_tasten.scad`) – harder to
+   hit, but easier to hold. Estimated weight 250–350 g.
+3. The battery dimensions are examples (3000 mAh 60 × 75 × 10, 5000 mAh 60 × 70 × 12).
+   Measure the real battery and adjust `AK`.
+4. The emergency button sits at the back (as usual for senior phones). If the phone lies
+   on its back, grandma has to lift it first. In the cradle, the cover can be reached
+   from the top rear. Try it out with her.

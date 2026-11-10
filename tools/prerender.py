@@ -1,9 +1,9 @@
-"""Erzeugt alle festen Ansagen vorab als WAV, damit sie ohne Verzögerung starten.
+"""Pre-renders all fixed announcements as WAV so they start without delay.
 
     sudo python3 -m tools.prerender /etc/omafon/config.yaml
 
-Nach jeder Änderung an Kontakten, Ansagen (P-Dict) oder Stimme erneut ausführen.
-Festnetz: lädt zusätzlich die Namen aus dem Fritz!Box-Telefonbuch.
+Run again after every change to contacts, announcements (P dict) or voice.
+Landline: also loads the names from the Fritz!Box phone book.
 """
 import asyncio
 import sys
@@ -16,7 +16,7 @@ from omafon.phone import P
 
 
 def load_fritz_phonebook(cfg) -> None:
-    """Festnetz: Namen aus dem Fritz!Box-Telefonbuch mit vorab sprechen."""
+    """Landline: pre-render the names from the Fritz!Box phone book too."""
     if getattr(cfg, "backend", "") != "sip" or not cfg.fritz.get("user"):
         return
     from omafon.fritz import FritzBox
@@ -26,7 +26,7 @@ def load_fritz_phonebook(cfg) -> None:
                                  cfg.country_code, int(f.get("tam", 0)),
                                  int(f.get("phonebook_id", 0))).phonebook()
         print(f"Fritz!Box-Telefonbuch: {len(cfg.phonebook)} Nummern")
-    except Exception as e:  # Box nicht erreichbar: Kontakte reichen
+    except Exception as e:  # box not reachable: the contacts are enough
         print(f"Fritz!Box-Telefonbuch nicht geladen: {e!r}")
 
 

@@ -1,6 +1,6 @@
-"""Tests für das Hybrid-Backend (Fritz!Box zu Hause + Mobilfunk unterwegs).
+"""Tests for the hybrid backend (Fritz!Box at home + mobile on the go).
 
-Festnetz: echtes BaresipBackend gegen FakeBaresip. Mobilfunk: SimModem.
+Landline: real BaresipBackend against FakeBaresip. Mobile: SimModem.
 
     python3 -m unittest discover -s tests -v
 """
@@ -54,7 +54,7 @@ class HybridTests(unittest.IsolatedAsyncioTestCase):
         await self.sim.sip.server.stop()
         self.tmp.cleanup()
 
-    # ------------------------------------------------------------ Hilfen
+    # ------------------------------------------------------------ Helpers
     async def until(self, cond, timeout=2.0):
         for _ in range(int(timeout / 0.01)):
             if cond():
@@ -117,7 +117,7 @@ class HybridTests(unittest.IsolatedAsyncioTestCase):
         self.t += 60
         await self.hy.tick()
         await self.pump()
-        self.assertNotIn("Fritzbox", self.said())          # unterwegs ist das normal
+        self.assertNotIn("Fritzbox", self.said())          # that's normal on the go
         self.assertNotIn(P["no_network"], self.said())
         await self.dial("0301234")
         self.assertTrue(await self.pump_until(lambda: self.modem_dials()))
@@ -144,27 +144,27 @@ class HybridTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_emergency_routing(self):
         self.assertEqual(self.hy._order("112"), ["home", "mobile"])
-        await self.hy.dial("112")                            # zu Hause: Festnetz
+        await self.hy.dial("112")                            # at home: landline
         self.assertEqual(self.sip_dials(), ["sip:112@fritz.box"])
         await self.hy.hangup()
-        self.sim.sip.server.fail.add("dial")                 # Festnetz streikt
+        self.sim.sip.server.fail.add("dial")                 # landline fails
         await self.hy.dial("112")
         self.assertEqual(self.modem_dials(), ["ATD112;"])
         await self.hy.hangup()
-        await self.leave_home()                              # unterwegs im Funkloch
+        await self.leave_home()                              # on the go in a dead zone
         self.sim.netz(False)
         self.t += 60
         await self.hy.tick()
         self.assertFalse(self.hy.mobile_ok)
-        await self.hy.dial("112")                            # Notruf geht trotzdem
+        await self.hy.dial("112")                            # emergency call works anyway
         self.assertEqual(self.modem_dials()[-1], "ATD112;")
 
     async def test_no_network_only_when_both_are_gone(self):
         await self.leave_home()
         self.sim.netz(False)
         self.t += 31
-        await self.hy.tick()                                 # Empfang neu abgefragt
-        self.t += 20                                         # Schonfrist + Aufwachzeit vorbei
+        await self.hy.tick()                                 # reception queried again
+        self.t += 20                                         # grace period + wake-up time over
         await self.hy.tick()
         await self.pump()
         self.assertIn(P["no_network"], self.said())
@@ -172,7 +172,7 @@ class HybridTests(unittest.IsolatedAsyncioTestCase):
         self.audio.spoken.clear()
         await self.dial("0301234")
         await self.pump()
-        self.assertIn(P["no_network"], self.said())          # Wählen: sofort Rückmeldung
+        self.assertIn(P["no_network"], self.said())          # dialing: immediate feedback
         self.assertEqual(self.modem_dials(), [])
         self.sim.netz(True)
         self.t += 31
@@ -180,14 +180,14 @@ class HybridTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await self.pump_until(lambda: P["network_ok"] in self.said()))
 
     async def test_second_line_is_rejected_during_call(self):
-        self.sim.sip.inject_call("+491609876543")            # Festnetz klingelt
+        self.sim.sip.inject_call("+491609876543")            # landline rings
         self.assertTrue(await self.pump_until(lambda: self.phone.state == S.RINGING))
         await self.press("CALL")
         self.assertTrue(await self.pump_until(lambda: self.phone.state == S.IN_CALL))
-        self.sim.inject_mobile_call("+491711234567")         # Handy klingelt dazwischen
+        self.sim.inject_mobile_call("+491711234567")         # mobile rings in between
         self.assertTrue(await self.pump_until(lambda: "AT+CHUP" in self.sim.modem.log))
         await self.pump()
-        self.assertEqual(self.phone.state, S.IN_CALL)        # Gespräch läuft weiter
+        self.assertEqual(self.phone.state, S.IN_CALL)        # call continues
         self.assertNotIn("Anruf von Peter", self.said())
         self.sim.inject("call_end")
         self.assertTrue(await self.pump_until(lambda: self.phone.state == S.IDLE))
@@ -223,7 +223,7 @@ class HybridTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await self.pump_until(lambda: any("openstreetmap" in t for _, t in self.sim.modem.sent)))
         self.assertEqual({n for n, _ in self.sim.modem.sent},
                          {"+491711234567", "+491609876543", "+491525550000"})
-        self.assertEqual(self.sim.sip.notifier.sent, [])     # echte SMS, kein Push
+        self.assertEqual(self.sim.sip.notifier.sent, [])     # real SMS, no push
 
     async def test_sos_at_home_calls_over_fritzbox_and_uses_home_position(self):
         self.cfg.home_position = [50.1109, 8.6821]
@@ -238,22 +238,22 @@ class HybridTests(unittest.IsolatedAsyncioTestCase):
     async def test_power_saving_mode(self):
         self.hy.opt["home_modem"] = "off"
         await self.hy.tick()
-        self.assertTrue(self.hy.radio_on)                    # noch nicht stabil genug
+        self.assertTrue(self.hy.radio_on)                    # not stable enough yet
         self.t += 301
         await self.hy.tick()
         self.assertFalse(self.hy.radio_on)
         self.assertIn("AT+CFUN=4", self.sim.modem.log)
         self.assertIn("Mobilfunk ruht", self.hy.status_words())
-        await self.hy.send_sms("+491711234567", "Test")      # Notruf-SMS weckt den Funk
+        await self.hy.send_sms("+491711234567", "Test")      # emergency SMS wakes the radio
         self.assertTrue(self.hy.radio_on)
         self.assertEqual(self.sim.modem.sent[-1], ("+491711234567", "Test"))
         self.t += 301
         await self.hy.tick()
         self.assertFalse(self.hy.radio_on)
-        await self.leave_home()                              # Wohnung verlassen
+        await self.leave_home()                              # leaving home
         self.assertTrue(self.hy.radio_on)
         self.assertEqual(self.sim.modem.log.count("AT+CFUN=1"), 2)
-        self.t += 5                                          # Aufwachzeit: keine Fehlalarme
+        self.t += 5                                          # wake-up time: no false alarms
         await self.hy.tick()
         await self.pump()
         self.assertNotIn(P["no_network"], self.said())
