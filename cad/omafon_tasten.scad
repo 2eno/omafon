@@ -1,53 +1,53 @@
-// Omafon – Tastenkappen und Tastenfront (parametrisch)
-// OpenSCAD 2021+.  Einzelteil wählen über "teil" und ggf. "ziffer".
-// Kommandozeile, z. B.:
+// Omafon – key caps and key front (parametric)
+// OpenSCAD 2021+.  Choose a single part with "teil" and "ziffer" if needed.
+// Command line, e.g.:
 //   openscad -D 'teil="ziffer"' -D 'ziffer="5"' -o taste_5.stl omafon_tasten.scad
 //   openscad -D 'teil="front"' -o front.stl omafon_tasten.scad
-//   Zweifarbig: dieselbe Kappe zweimal exportieren, mit -D 'farbteil="kappe"' und
-//   -D 'farbteil="zeichen"', im Slicer als zwei Körper eines Objekts laden.
+//   Two colors: export the same cap twice, with -D 'farbteil="kappe"' and
+//   -D 'farbteil="zeichen"', load them in the slicer as two bodies of one object.
 //
-// Druck: Kappen mit der Oberseite nach oben, 0,12–0,16 mm Schicht, PETG oder PLA.
-// Lesbarkeit: Zeichen immer kontrastreich zur Kappe (Vorschlag unten in FARBEN):
-//   - Mehrmaterial-Drucker: farbteil="kappe" + farbteil="zeichen" (zwei STL)
-//   - Ein-Düsen-Drucker:   Farbwechsel (M600) an der Kappenoberkante (kappe_h) klappt
-//     sauber nur bei flachen Kappen (nachricht, info). Ziffern sitzen in einer Mulde –
-//     dort besser Mehrmaterial oder das erhabene Zeichen nachträglich einfärben.
-// Erst EINE Kappe drucken und den Sitz auf dem Taster prüfen (stem_spiel).
+// Printing: caps with the top facing up, 0.12–0.16 mm layers, PETG or PLA.
+// Legibility: symbols always in a contrasting color to the cap (suggestion below in FARBEN):
+//   - multi-material printers: farbteil="kappe" + farbteil="zeichen" (two STLs)
+//   - single-nozzle printers: a color change (M600) at the cap top edge (kappe_h) only works
+//     cleanly for flat caps (nachricht, info). Digits sit in a dish –
+//     better use multi-material there or color the raised symbol afterwards.
+// Print ONE cap first and check the fit on the switch (stem_spiel).
 
-/* [Auswahl] */
+/* [Selection] */
 teil = "uebersicht"; // [uebersicht, ziffer, anrufen, auflegen, nachricht, info, notruf, front]
-ziffer = "5";        // 0-9, * oder #
-braille = false;     // Braille-Zelle oben an der Kappe
-farbteil = "alles";  // [alles, kappe, zeichen] – für zweifarbigen Druck getrennt exportieren
+ziffer = "5";        // 0-9, * or #
+braille = false;     // Braille cell at the top of the cap
+farbteil = "alles";  // [alles, kappe, zeichen] – export separately for two-color printing
 
-/* [Maße] */
-raster = 24;         // Tastenabstand Mitte-Mitte
-kappe = 20;          // Kantenlänge Ziffernkappe oben
-kappe_h = 9;         // Höhe über Unterkante
-eck_r = 3;           // Eckenradius
+/* [Dimensions] */
+raster = 24;         // key spacing center to center
+kappe = 20;          // edge length of the digit cap at the top
+kappe_h = 9;         // height above the bottom edge
+eck_r = 3;           // corner radius
 wand = 1.6;
-relief_h = 1.0;      // Höhe der erhabenen Zeichen
-schrift = "Atkinson Hyperlegible:style=Bold"; // Fallback: "Liberation Sans:style=Bold"
+relief_h = 1.0;      // height of the raised symbols
+schrift = "Atkinson Hyperlegible:style=Bold"; // fallback: "Liberation Sans:style=Bold"
 schrift_gr = 12;
 
-/* [Cherry-MX-Aufnahme] */
+/* [Cherry MX mount] */
 stem_d = 5.6;
 kreuz_l = 4.1;
-kreuz_b = 1.25;      // Original 1.17; je nach Drucker 1.2–1.3
+kreuz_b = 1.25;      // original 1.17; 1.2–1.3 depending on the printer
 stem_tiefe = 4.0;
-stem_spiel = 0.0;    // zusätzliche Weite, falls zu stramm
+stem_spiel = 0.0;    // extra width if too tight
 
 /* [Front] */
-platte = 1.5;        // MX-Klemmmaß – an den Ausschnitten exakt 1,5 mm
-ausschnitt = 14.1;   // MX-Norm 14,0; gedruckte Löcher fallen kleiner aus
-steg_h = 3.0;        // Höhe der Taststege über der Platte
+platte = 1.5;        // MX clamping dimension – exactly 1.5 mm at the cut-outs
+ausschnitt = 14.1;   // MX standard 14.0; printed holes come out smaller
+steg_h = 3.0;        // height of the tactile ridges above the plate
 steg_b = 2.0;
 rand = 6;
 
 $fn = 48;
 
-// Kontrastreiche Farbpaare [Kappe, Zeichen] – nur für Vorschau/3MF, STL hat keine Farbe.
-// Weiß/Schwarz ist für Sehreste am besten lesbar; Gelb/Schwarz für die Anruftaste.
+// High-contrast color pairs [cap, symbol] – only for preview/3MF, STL has no color.
+// White/black is the most legible for residual vision; yellow/black for the call key.
 FARBEN = [
     ["ziffer",    ["white",   "black"]],
     ["anrufen",   ["#FFD100", "black"]],
@@ -58,8 +58,8 @@ FARBEN = [
 ];
 function farben(art) = [for (e = FARBEN) if (e[0] == art) e[1]][0];
 
-// Kappe und Zeichen als getrennte Körper: children(0) = Kappe, children(1) = Zeichen.
-// "kappe" spart das Zeichen aus, damit sich beide Körper im Slicer nicht überlappen.
+// Cap and symbol as separate bodies: children(0) = cap, children(1) = symbol.
+// "kappe" leaves out the symbol so the two bodies don't overlap in the slicer.
 module zweifarbig(art) {
     f = farben(art);
     if (farbteil == "alles") { color(f[0]) children(0); color(f[1]) children(1); }
@@ -67,7 +67,7 @@ module zweifarbig(art) {
     else if (farbteil == "zeichen") color(f[1]) children(1);
 }
 
-// ------------------------------------------------------------ Grundformen
+// ------------------------------------------------------------ Basic shapes
 module rrect(w, d, r) {
     offset(r) square([w - 2 * r, d - 2 * r], center = true);
 }
@@ -82,7 +82,7 @@ module stem() {
     }
 }
 
-// Kappenkörper: unten etwas größer als oben, innen hohl für das Tastergehäuse
+// cap body: slightly larger at the bottom than at the top, hollow for the switch housing
 module koerper(w, d, oben = "mulde") {
     unten_w = w + 1.5; unten_d = d + 1.5;
     difference() {
@@ -90,22 +90,22 @@ module koerper(w, d, oben = "mulde") {
             linear_extrude(0.01) rrect(unten_w, unten_d, eck_r);
             translate([0, 0, kappe_h - 0.01]) linear_extrude(0.01) rrect(w, d, eck_r);
         }
-        // Hohlraum (Tastergehäuse ragt beim Drücken hinein)
+        // cavity (the switch housing moves into it when pressed)
         translate([0, 0, -0.01]) hull() {
             linear_extrude(0.01) rrect(unten_w - 2 * wand, unten_d - 2 * wand, 1);
             translate([0, 0, kappe_h - 3]) linear_extrude(0.01) rrect(w - 2 * wand, d - 2 * wand, 1);
         }
-        if (oben == "mulde")  // flache Kugelmulde zentriert den Finger
+        if (oben == "mulde")  // shallow spherical dish centers the finger
             translate([0, 0, kappe_h + 60 - 0.8]) sphere(r = 60, $fn = 120);
-        if (oben == "rinne")  // Querrinne (Auflegen)
+        if (oben == "rinne")  // cross groove (hang up)
             translate([0, 0, kappe_h + 30 - 1.4]) rotate([0, 90, 0]) cylinder(r = 30, h = w + 2, center = true, $fn = 120);
     }
-    if (oben == "kuppel")     // nach außen gewölbt (Anrufen)
+    if (oben == "kuppel")     // domed outwards (call)
         intersection() {
             translate([0, 0, kappe_h - 0.01]) linear_extrude(3) rrect(w, d, eck_r);
             translate([0, 0, kappe_h - 40 + 2.2]) sphere(r = 40, $fn = 120);
         }
-    // Stem in der Mitte, mit Verbindung zum Deckel
+    // stem in the middle, connected to the top
     translate([0, 0, kappe_h - 3 - stem_tiefe]) stem();
 }
 
@@ -117,11 +117,11 @@ module relief_text(t, gr = schrift_gr, y = 0) {
         text(t, size = gr, font = schrift, halign = "center", valign = "center");
 }
 
-// Braille: Punkte 1-2-3 links, 4-5-6 rechts. Ziffern = Zahlzeichen + a..j
+// Braille: dots 1-2-3 left, 4-5-6 right. Digits = number sign + a..j
 BRAILLE = [["1", [1]], ["2", [1, 2]], ["3", [1, 4]], ["4", [1, 4, 5]], ["5", [1, 5]],
            ["6", [1, 2, 4]], ["7", [1, 2, 4, 5]], ["8", [1, 2, 5]], ["9", [2, 4]], ["0", [2, 4, 5]]];
 function bpunkte(z) = [for (e = BRAILLE) if (e[0] == z) e[1]][0];
-// Höhe der Muldenoberfläche an Stelle (x, y) – Punkte sitzen auf der Fläche
+// height of the dish surface at (x, y) – dots sit on the surface
 function mulde_z(x, y) = min(kappe_h, kappe_h - 0.8 + 60 - sqrt(max(0, 3600 - x * x - y * y)));
 module bzelle(punkte, x0, y0) {
     for (p = punkte) {
@@ -132,17 +132,17 @@ module bzelle(punkte, x0, y0) {
 }
 module braille_ziffer(z, y0 = 8.2) {
     if (bpunkte(z) != undef) {
-        bzelle([3, 4, 5, 6], -4.6, y0);   // Zahlzeichen
+        bzelle([3, 4, 5, 6], -4.6, y0);   // number sign
         bzelle(bpunkte(z), 1.6, y0);
     }
 }
 
-// ------------------------------------------------------------ Kappen
+// ------------------------------------------------------------ Caps
 module kappe_ziffer(z) {
     zweifarbig("ziffer") {
         union() {
             koerper(kappe, kappe, "mulde");
-            if (z == "5")  // Tastpunkt wie auf jeder Telefontastatur (in Kappenfarbe)
+            if (z == "5")  // tactile dot like on every phone keypad (in the cap color)
                 translate([0, braille ? -8 : -6.2, kappe_h - 0.9]) scale([1, 1, 0.7]) sphere(d = 2.2);
             if (braille) braille_ziffer(z);
         }
@@ -151,7 +151,7 @@ module kappe_ziffer(z) {
     }
 }
 
-module hoerer2d() {   // Telefonhörer: Bügel oben, Hör- und Sprechmuschel unten
+module hoerer2d() {   // telephone handset: bar at the top, ear and mouth piece at the bottom
     translate([0, -2.5]) {
         intersection() {
             difference() { circle(r = 9.2); circle(r = 6.4); }
@@ -174,12 +174,12 @@ module kappe_anrufen() {
 module kappe_auflegen() {
     zweifarbig("auflegen") {
         koerper(kappe, kappe, "rinne");
-        // erhabener Querbalken in der Rinne – fühlbar anders als Anrufen
+        // raised cross bar in the groove – feels different from the call key
         translate([0, 0, kappe_h - 1.6]) linear_extrude(relief_h + 0.9) rrect(14, 3.2, 1.4);
     }
 }
 
-module kappe_nachricht() {   // gleiche Größe, aber flach – fühlbar anders als Kuppel und Rinne
+module kappe_nachricht() {   // same size but flat – feels different from dome and groove
     zweifarbig("nachricht") {
     koerper(kappe, kappe, "flach");
     translate([0, 0, kappe_h - 0.02]) linear_extrude(relief_h) difference() {
@@ -206,11 +206,11 @@ module kappe_info() {
         }
         for (y = [-4, 0, 4]) translate([0, y, kappe_h - 0.02]) linear_extrude(relief_h) rrect(22, 1.4, 0.6);
     }
-    // 34 mm auf einem Taster geht noch. Kippelt sie zu sehr: 2u-Stabilisator
-    // (Cherry, Plattenmontage) einbauen und Ausschnitte in der Front ergänzen.
+    // 34 mm on one switch is still fine. If it wobbles too much: fit a 2u stabilizer
+    // (Cherry, plate mount) and add the cut-outs in the front.
 }
 
-module kappe_notruf() {   // runder Knopf mit Noppen, sitzt versenkt unter der Klappe
+module kappe_notruf() {   // round button with nubs, sits recessed under the cover
     d = 18;
     zweifarbig("notruf") {
         union() {
@@ -220,14 +220,14 @@ module kappe_notruf() {   // runder Knopf mit Noppen, sitzt versenkt unter der K
             }
             translate([0, 0, kappe_h - 3 - stem_tiefe]) stem();
         }
-        for (a = [0:60:359], r = [0, 5.2]) if (r > 0 || a == 0)   // Noppen in Kontrastfarbe
+        for (a = [0:60:359], r = [0, 5.2]) if (r > 0 || a == 0)   // nubs in a contrasting color
             translate([r * cos(a), r * sin(a), kappe_h]) sphere(d = 2.4, $fn = 16);
     }
 }
 
-// ------------------------------------------------------------ Tastenfront
-// Platte mit MX-Ausschnitten und Tast-Stegen zwischen den Tasten.
-POS = [ // [x, y, art]
+// ------------------------------------------------------------ Key front
+// plate with MX cut-outs and tactile ridges between the keys.
+POS = [ // [x, y, type]
     [-1, 0, "a"], [0, 0, "n"], [1, 0, "x"],
     [-1, -1, "1"], [0, -1, "2"], [1, -1, "3"],
     [-1, -2, "4"], [0, -2, "5"], [1, -2, "6"],
@@ -238,7 +238,7 @@ POS = [ // [x, y, art]
 front_b = 3 * raster + 2 * rand;
 front_h = 6 * raster + 2 * rand;
 
-// Für andere Dateien (use <omafon_tasten.scad>): Maße und Tastenpositionen
+// for other files (use <omafon_tasten.scad>): dimensions and key positions
 function tastenfront_mass() = [front_b, front_h, raster, platte, steg_h];
 function tastenpositionen() = POS;
 
@@ -246,7 +246,7 @@ module front() {
     difference() {
         union() {
             translate([0, -2.5 * raster, platte / 2]) cube([front_b, front_h, platte], center = true);
-            // Stege: Gitter zwischen den Tasten, für das Entlangtasten
+            // ridges: grid between the keys, for feeling along
             translate([0, -2.5 * raster, platte]) linear_extrude(steg_h) difference() {
                 square([front_b, front_h], center = true);
                 for (p = POS) translate([p[0] * raster, (p[1] + 2.5) * raster])
@@ -259,8 +259,8 @@ module front() {
     }
 }
 
-// ------------------------------------------------------------ Auswahl
-module kappe_fuer(art) {   // Farben kommen aus FARBEN (zweifarbig)
+// ------------------------------------------------------------ Selection
+module kappe_fuer(art) {   // colors come from FARBEN (two-color)
     if (art == "a") kappe_anrufen();
     else if (art == "x") kappe_auflegen();
     else if (art == "n") kappe_nachricht();
