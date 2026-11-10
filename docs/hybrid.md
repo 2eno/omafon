@@ -1,161 +1,164 @@
-# Hybridgerät: zu Hause Festnetz, unterwegs Handy
+# Hybrid device: landline at home, mobile on the go
 
-Ein Omafon, das **zu Hause** als schnurloses Telefon an der Fritz!Box arbeitet
-(WLAN/SIP, Festnetznummer, Anrufbeantworter, Ladeschale) und **unterwegs** als Handy
-(LTE, Handynummer, SMS, GPS). Für die Person gibt es **ein** Gerät mit **einer**
-Bedienung. Welcher Weg gerade telefoniert, entscheidet das Gerät selbst.
+*English · [Deutsch](hybrid.de.md)*
 
-`backend: hybrid` – Code in `omafon/hybrid.py`, Beispiel in
-`config.hybrid.example.yaml`, Tests in `tests/test_hybrid.py`.
-Ausprobieren ohne Hardware:
+An Omafon that works **at home** as a cordless phone on the Fritz!Box
+(Wi-Fi/SIP, landline number, answering machine, cradle) and **on the go** as a mobile
+phone (LTE, mobile number, SMS, GPS). For the person there is **one** device with
+**one** way of using it. The device decides by itself which path is used for a call.
+
+`backend: hybrid` – code in `omafon/hybrid.py`, example in
+`config.hybrid.example.yaml`, tests in `tests/test_hybrid.py`.
+Try it without hardware (the simulator commands are German):
 
 ```bash
 python3 -m omafon.main --config config.hybrid.example.yaml --sim
-# !wlan aus/an = Wohnung verlassen/betreten   !netz aus/an = Funkloch
-# !ring = Festnetz (zu Hause)   !mring = Handynummer   !sms = SMS   !ab = Anrufbeantworter
+# !wlan aus/an = leave/enter home   !netz aus/an = dead zone
+# !ring = landline (at home)   !mring = mobile number   !sms = SMS   !ab = answering machine
 ```
 
-## 1. Warum hybrid?
+## 1. Why hybrid?
 
-| Situation | nur Festnetz | nur Mobilfunk | **Hybrid** |
+| Situation | landline only | mobile only | **Hybrid** |
 |---|---|---|---|
-| Zu Hause, normaler Anruf | ✔ Festnetz, AB | ✔ (Empfang im Haus?) | ✔ über Fritz!Box |
-| Garten, Wohnungsrand | WLAN bricht ab | ✔ | ✔ schaltet bei schwachem WLAN auf Mobilfunk |
-| Einkaufen, Arzt, Familie besuchen | ✘ | ✔ | ✔ |
-| Stromausfall / Fritz!Box hängt | ✘ | ✔ | ✔ automatisch Mobilfunk |
-| Funkloch im Haus (Keller, dicke Wände) | ✔ | ✘ | ✔ |
-| Notruf zu Hause | ✔ Anschlussadresse | GPS drinnen oft schlecht | ✔ Festnetz zuerst, Mobilfunk als Rückfall |
-| Notruf unterwegs | ✘ | ✔ GPS per SMS | ✔ |
+| At home, normal call | ✔ landline, answering machine | ✔ (reception indoors?) | ✔ via Fritz!Box |
+| Garden, edge of the flat | Wi-Fi drops | ✔ | ✔ switches to mobile when Wi-Fi is weak |
+| Shopping, doctor, visiting family | ✘ | ✔ | ✔ |
+| Power cut / Fritz!Box hangs | ✘ | ✔ | ✔ mobile automatically |
+| Dead zone in the house (basement, thick walls) | ✔ | ✘ | ✔ |
+| Emergency call at home | ✔ line address | GPS often poor indoors | ✔ landline first, mobile as fallback |
+| Emergency call on the go | ✘ | ✔ GPS via SMS | ✔ |
 
-Hauptgewinn ist **Ausfallsicherheit**: Für einen Notruf stehen zwei unabhängige
-Wege bereit.
+The main gain is **resilience**: two independent paths are available for an
+emergency call.
 
-## 2. Verhalten (Entscheidungstabelle)
+## 2. Behavior (decision table)
 
-| Ereignis | Regel | Warum |
+| Event | Rule | Why |
 |---|---|---|
-| Normaler Anruf, zu Hause | Fritz!Box, bei Fehler sofort Mobilfunk | Festnetz-Flatrate, gute Sprachqualität im Haus |
-| Normaler Anruf, WLAN schwächer als −75 dBm | Mobilfunk zuerst | Gespräch würde am WLAN-Rand abreißen |
-| Normaler Anruf, unterwegs | Mobilfunk | – |
-| **110/112**, zu Hause | Festnetz zuerst, dann Mobilfunk | Anbieter übermittelt die Anschlussadresse |
-| **110/112**, unterwegs/Funkloch | Mobilfunk, **auch ohne eigenes Netz** | Notruf geht über jedes verfügbare Netz |
-| Klingeln auf einem Weg | dieses Gespräch gehört dem Weg | – |
-| Klingeln auf dem anderen Weg während eines Gesprächs | **abweisen** (Anrufer hört besetzt bzw. landet auf der Mailbox/dem AB) | Anklopfen ohne Display ist für die Zielgruppe zu verwirrend |
-| SMS | über Mobilfunk; ohne Netz Push (Telegram/E-Mail), wenn eingerichtet | – |
-| AB-Nachricht (Fritz!Box) und SMS | ein gemeinsamer Posteingang, gleiche Ankündigung (Gong, LED) | eine Bedienung |
-| Notruf-Hinweis | SMS an die Notfallkontakte; zu Hause mit `home_position`, unterwegs mit GPS-Link | – |
-| Fritz!Box weg, Mobilfunk da | **keine** Ansage (optional „Unterwegs …“ mit `announce_mode`) | unterwegs ist das der Normalfall |
-| Beide Wege weg | nach 10 s „Kein Netz. Telefonieren geht gerade nicht. Ich versuche es weiter.“, Erinnerung alle 10 min, nachts nur auf Tastendruck | nie ohne Rückmeldung |
-| Info-Taste | „Zu Hause. Verbindung zur Fritzbox gut. Mobilfunk: Empfang gut.“ | Zustand jederzeit abfragbar |
+| Normal call, at home | Fritz!Box, mobile immediately on error | landline flat rate, good voice quality indoors |
+| Normal call, Wi-Fi weaker than −75 dBm | mobile first | the call would drop at the edge of the Wi-Fi |
+| Normal call, on the go | mobile | – |
+| **110/112**, at home | landline first, then mobile | the provider transmits the line address |
+| **110/112**, on the go/dead zone | mobile, **even without our own network** | emergency calls go through any available network |
+| Ringing on one path | the call belongs to that path | – |
+| Ringing on the other path during a call | **reject** (the caller hears busy or reaches the mailbox/answering machine) | call waiting without a display is too confusing for the target group |
+| SMS | via mobile; without a network push (Telegram/e-mail) if set up | – |
+| Answering machine message (Fritz!Box) and SMS | one shared inbox, same notification (gong, LED) | one way of using it |
+| Emergency notice | SMS to the emergency contacts; at home with `home_position`, on the go with a GPS link | – |
+| Fritz!Box gone, mobile available | **no** announcement (optionally “Unterwegs …” with `announce_mode`) | on the go that is the normal case |
+| Both paths gone | after 10 s „Kein Netz. Telefonieren geht gerade nicht. Ich versuche es weiter.“ (“No network. Calling isn’t possible right now. I keep trying.”), reminder every 10 min, at night only on a key press | never without feedback |
+| Info key | „Zu Hause. Verbindung zur Fritzbox gut. Mobilfunk: Empfang gut.“ (“At home. Connection to the Fritzbox good. Mobile: reception good.”) | the state can be queried at any time |
 
-Phone bleibt dabei unverändert bis auf eines: Das Backend darf bestimmen, welcher
-Text aus dem P-Dict bei „keine Verbindung“ gesprochen wird.
+Phone itself stays unchanged except for one thing: the backend may decide which text
+from the P dict is spoken for “no connection”.
 
-## 3. Rufnummern – das muss die Familie wissen
+## 3. Phone numbers – what the family needs to know
 
-Das Gerät hat **zwei Nummern**: Festnetz und Handy. Drei Betriebsarten:
+The device has **two numbers**: landline and mobile. Three modes:
 
-| `home_modem` | Zu Hause erreichbar über | Akku | Einrichtung |
+| `home_modem` | Reachable at home via | Battery | Setup |
 |---|---|---|---|
-| `"on"` (Standard) | Festnetz **und** Handy | ca. 0,1 W mehr in Bereitschaft | keine |
-| `"off"` (Sparmodus) | Festnetz; Handy-Anrufe nur mit Rufumleitung | Mobilfunk ruht (Flugmodus), wenn die Fritz!Box 5 min stabil ist | beim Mobilfunkanbieter **Rufumleitung „bei nicht erreichbar“ auf die Festnetznummer** (GSM-Code `**62*<Festnetznummer>#`) |
-| *Ausbaustufe* | Festnetz-Anrufe unterwegs aufs Handy | – | Fritz!Box-Rufumleitung per TR-064 beim Verlassen ein- und beim Heimkommen ausschalten (`X_AVM-DE_OnTel` kennt Rufumleitungen; nicht umgesetzt, Kosten der Umleitung beachten) |
+| `"on"` (default) | landline **and** mobile | approx. 0.1 W more in standby | none |
+| `"off"` (power saving) | landline; mobile calls only with call forwarding | mobile rests (airplane mode) when the Fritz!Box has been stable for 5 min | with the mobile provider, **call forwarding “when unreachable” to the landline number** (GSM code `**62*<landline number>#`) |
+| *Future extension* | landline calls forwarded to the mobile on the go | – | switch Fritz!Box call forwarding on when leaving and off when coming home via TR-064 (`X_AVM-DE_OnTel` knows call forwarding; not implemented, mind the cost of forwarding) |
 
-Empfehlung: **`"on"`**. Der Sparmodus spart nur etwa 15 % der Bereitschaftsleistung
-(der Pi braucht ca. 0,6 W, das Modem in Ruhe ca. 0,1 W). Dafür sind SMS zu Hause
-verzögert, und ein Notruf über Mobilfunk muss das Modem erst wecken. Auch 112
-braucht nach dem Einschalten einige Sekunden, bis eine Funkzelle gefunden ist;
-normale Anrufe gehen erst nach der Netzanmeldung (bis ca. 45 s).
-Der Code weckt das Modem automatisch für Notruf-SMS, Mobilfunk-Wählen und GPS.
+Recommendation: **`"on"`**. Power saving only saves about 15 % of the standby power
+(the Pi needs approx. 0.6 W, the modem at rest approx. 0.1 W). In exchange, SMS are
+delayed at home, and an emergency call via mobile first has to wake the modem. Even
+112 needs a few seconds after switching on until a cell is found; normal calls only
+work after network registration (up to approx. 45 s).
+The code wakes the modem automatically for emergency SMS, mobile dialing and GPS.
 
-Die Mailbox des Mobilfunkanbieters sollte **aus** sein oder auf den Festnetz-AB
-umleiten. Omafon liest nur den AB der Fritz!Box vor.
+The mobile provider’s mailbox should be **off** or forward to the landline answering
+machine. Omafon only reads out the Fritz!Box answering machine.
 
-## 4. Grenzen
+## 4. Limitations
 
-- **Kein Weiterreichen im Gespräch.** Wer mit einem WLAN-Gespräch die Wohnung
-  verlässt, verliert die Verbindung. Das Gerät sagt dann „Gespräch beendet“ wie bei
-  jedem Abbruch. Ein Rückruf über Mobilfunk wäre machbar, wurde aber bewusst nicht
-  automatisch umgesetzt (Doppelanrufe, Kosten) → offene Frage. Die
-  WLAN-Schwelle (`weak_wifi_dbm`) verringert das Problem.
-- **Zwei Absendernummern.** Wer angerufen wird, sieht je nach Weg die Festnetz-
-  oder die Handynummer. Beide gehören in die Kontakte der Familie.
-- **Anklopfen gibt es nicht.** Ein zweiter Anrufer auf dem anderen Weg wird
-  abgewiesen.
+- **No handover during a call.** Whoever leaves home during a Wi-Fi call loses the
+  connection. The device then says „Gespräch beendet“ (“call ended”) like for any drop.
+  A callback via mobile would be possible but was deliberately not automated (double
+  calls, cost) → open question. The Wi-Fi threshold (`weak_wifi_dbm`) reduces the
+  problem.
+- **Two caller numbers.** Whoever gets called sees the landline or the mobile number
+  depending on the path. Both belong in the family’s contacts.
+- **There is no call waiting.** A second caller on the other path is rejected.
 
 ## 5. Hardware
 
-Grundlage ist die **Mobilfunk-Hardware** (SIM7600E-H) **plus Ladeschale** der
-Festnetz-Variante. Details zu Schale, Kontakten und Relais:
+The basis is the **mobile hardware** (SIM7600E-H) **plus the cradle** of the landline
+variant. Details on cradle, contacts and relay:
 [festnetz-hardware.md](festnetz-hardware.md).
 
-### Abweichungen gegenüber Festnetz
+### Differences from the landline variant
 
-| Teil | Hybrid | ca. € |
+| Part | Hybrid | approx. € |
 |---|---|---|
-| Waveshare SIM7600E-H 4G HAT | Mobilfunk, GNSS | 90–100 |
-| LTE-FPC-Antenne(n) zum Einkleben (Haupt, optional Diversity) | statt Stabantennen | 5–10 |
-| Aktive GNSS-Keramikantenne 25 × 25 mm | GPS beim Notruf unterwegs | 5–8 |
-| Aufwärtswandler 5 V **3 A** (statt 1 A) | Sendespitzen des Modems bis 2 A | 10–12 |
-| LiPo **4000–5000 mAh** (statt 3000 mAh) | Bereitschaft | 15–20 |
-| Nano-/Micro-SIM mit Sprachtarif | – | Vertrag |
-| **Gesamt** | Festnetz-Handteil + diese Teile + Ladeschale | **ca. 270–320** |
+| Waveshare SIM7600E-H 4G HAT | mobile, GNSS | 90–100 |
+| LTE FPC antenna(s) to glue in (main, optional diversity) | instead of rod antennas | 5–10 |
+| Active GNSS ceramic antenna 25 × 25 mm | GPS for emergency calls on the go | 5–8 |
+| Boost converter 5 V **3 A** (instead of 1 A) | modem transmit peaks up to 2 A | 10–12 |
+| LiPo **4000–5000 mAh** (instead of 3000 mAh) | standby | 15–20 |
+| Nano/micro SIM with a voice plan | – | contract |
+| **Total** | landline handset + these parts + cradle | **approx. 270–320** |
 
-### Strombilanz
+### Power budget
 
-| Zustand | Leistung (Schätzung) |
+| State | Power (estimate) |
 |---|---|
-| Pi in Ruhe, WLAN verbunden | ca. 0,60 W |
-| SIM7600 in Ruhe, eingebucht | ca. 0,10 W (mit Schlafmodus AT+CSCLK und DTR-Leitung weniger) |
-| Rest (Verstärker aus, MCP23017, Akku-IC, LED) | ca. 0,03 W |
-| **Summe Bereitschaft** | **ca. 0,73 W** (Sparmodus zu Hause: ca. 0,63 W) |
+| Pi idle, Wi-Fi connected | approx. 0.60 W |
+| SIM7600 idle, registered | approx. 0.10 W (less with sleep mode AT+CSCLK and the DTR line) |
+| Rest (amplifier off, MCP23017, battery IC, LED) | approx. 0.03 W |
+| **Total standby** | **approx. 0.73 W** (power saving at home: approx. 0.63 W) |
 
-5000 mAh × 3,7 V × 85 % ≈ 15,7 Wh → **ca. 21 h Bereitschaft**
-(3000 mAh: ca. 13 h). Das Telefon gehört weiterhin nachts in die Schale. Die
-Akkuwarnungen bei 20/10/5 % kommen per Ansage.
+5000 mAh × 3.7 V × 85 % ≈ 15.7 Wh → **approx. 21 h standby**
+(3000 mAh: approx. 13 h). The phone still belongs in the cradle at night. The battery
+warnings at 20/10/5 % are spoken.
 
-### Antennen im Handteil
+### Antennas in the handset
 
 ```
-   ┌──────────────┐  oben:  GNSS-Patch (zum Himmel), WLAN-Platinenantenne des Pi
-   │ GNSS    WLAN │         ≥ 20 mm Abstand zueinander
+   ┌──────────────┐  top:    GNSS patch (towards the sky), Pi's Wi-Fi PCB antenna
+   │ GNSS    WLAN │          ≥ 20 mm apart
    │              │
-   │   Tasten     │  Mitte: Tastenfeld, Pi, Modem-HAT
+   │   keys       │  middle: keypad, Pi, modem HAT
    │              │
-   │  Akku (hinten)│ Akku nie über einer Antenne
-   │ LTE-FPC      │  unten: LTE-Hauptantenne, möglichst weit weg vom Kopf
+   │ battery(back)│  never put the battery over an antenna
+   │ LTE FPC      │  bottom: LTE main antenna, as far from the head as possible
    └──────────────┘
 ```
 
-- LTE unten, also beim Telefonieren am Kinn statt am Ohr: weniger Abstrahlung zum Kopf.
-- Die Platinenantenne des Pi **nicht umbauen** (Funkzulassung, siehe
-  [festnetz-recherche.md](festnetz-recherche.md#4-zulassung-funkanlagengesetz--red)).
-- LTE-Band 7 (2,6 GHz) liegt nahe am WLAN (2,4 GHz). Abstand und Filter im Modem
-  reichen in der Regel; bei Störungen im Test die LTE-Antenne weiter weg legen.
+- LTE at the bottom, i.e. at the chin instead of the ear during a call: less radiation
+  towards the head.
+- **Don’t modify** the Pi’s PCB antenna (radio approval, see
+  [festnetz-recherche.md](festnetz-recherche.md#4-approval-radio-equipment-act--red)).
+- LTE band 7 (2.6 GHz) is close to Wi-Fi (2.4 GHz). Distance and the filters in the
+  modem are usually enough; if there is interference in testing, move the LTE antenna
+  further away.
 
-### Gehäuse und Ladeschale
+### Housing and cradle
 
-- Das Handteil ist durch HAT und größeren Akku **6 mm dicker** (36 statt 30 mm).
-  Gehäuse und Ladeschale nehmen das über `variante="hybrid"` aus
-  `cad/omafon_masse.scad`. Das fertige Druckpaket liegt im CI-Artefakt unter
-  `gehaeuse/hybrid/` und `ladeschale/hybrid/`. Teileliste und
-  Zusammenbau: [druckteile.md](druckteile.md).
-- Die SIM-Karte steckt im HAT über dem Pi. Zum Wechseln das Gehäuse öffnen
-  (4 Schrauben hinten). Das ist selten nötig, und Oma muss da nie ran.
+- Because of the HAT and the larger battery, the handset is **6 mm thicker** (36 instead
+  of 30 mm). Housing and cradle take this from `variante="hybrid"` in
+  `cad/omafon_masse.scad`. The finished print package is in the CI artifact under
+  `gehaeuse/hybrid/` and `ladeschale/hybrid/`. Parts list and assembly:
+  [druckteile.md](druckteile.md).
+- The SIM card sits in the HAT above the Pi. To change it, open the housing
+  (4 screws at the back). That is rarely needed, and grandma never has to touch it.
 
-## 6. Offene Fragen
+## 6. Open questions
 
-1. **SAR/Abstrahlung am Kopf:** Ein selbstgebautes LTE-Telefon ist nicht
-   SAR-geprüft. Antenne unten, Lautstärke für Freisprechen gut. Gilt genauso für
-   jedes selbstgebaute LTE-Gerät.
-2. **Sparmodus oder nicht?** (Empfehlung „on“) und ob der Anbieter die
-   Rufumleitung „bei nicht erreichbar“ zuverlässig ausführt.
-3. **Automatischer Rückruf über Mobilfunk** nach einem WLAN-Abbruch im Gespräch:
-   gewünscht?
-4. **Fritz!Box-Rufumleitung unterwegs** (Festnetz → Handy per TR-064): gewünscht?
-   Kostet je nach Tarif Gebühren.
-5. **Welcher Weg bei schwachem WLAN, aber gutem Mobilfunk für den Notruf?** Umgesetzt
-   ist Mobilfunk (stabile Verbindung vor Adressübermittlung). Alternative:
-   Festnetz trotzdem zuerst.
-6. Alle offenen Fragen aus [festnetz-recherche.md](festnetz-recherche.md#offene-fragen-auch-im-pull-request)
-   gelten weiter (AB-Format, Notruf über IP-Telefon, baresip am Pi).
+1. **SAR/radiation at the head:** a self-built LTE phone is not SAR-tested. Antenna at
+   the bottom, volume good enough for hands-free. The same applies to any self-built
+   LTE device.
+2. **Power saving or not?** (recommendation “on”) and whether the provider reliably
+   performs call forwarding “when unreachable”.
+3. **Automatic callback via mobile** after a Wi-Fi drop during a call: wanted?
+4. **Fritz!Box call forwarding on the go** (landline → mobile via TR-064): wanted?
+   May cost fees depending on the plan.
+5. **Which path for the emergency call when Wi-Fi is weak but mobile is good?**
+   Implemented is mobile (a stable connection over address transmission). Alternative:
+   landline first anyway.
+6. All open questions from [festnetz-recherche.md](festnetz-recherche.md#open-questions-also-in-the-pull-request)
+   still apply (answering machine format, emergency calls via an IP phone, baresip on
+   the Pi).
