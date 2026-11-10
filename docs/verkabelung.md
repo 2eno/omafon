@@ -1,179 +1,181 @@
-# Verkabelung
+# Wiring
 
-Gilt für **Festnetz** und **Hybrid**. Was nur beim Hybrid dazukommt, ist mit
-**(H)** markiert. Die Pinbelegung muss mit `omafon/hardware.py` übereinstimmen
-(`MCP_KEYS`, `PI_INPUTS`, `PIN_VIBRA`, `PIN_LED`, `PIN_MODEM_PWR`). Bei Änderungen
-immer beide Stellen anpassen. Bauteile: [stueckliste.md](stueckliste.md).
+*English · [Deutsch](verkabelung.de.md)*
 
-> **Stand:** abgeleitet aus Code, Datenblattangaben der Breakouts und dem
-> Gehäuse. Am Muster noch nicht nachgemessen. Mit 🔍 markierte Punkte beim
-> ersten Aufbau prüfen.
+Applies to **landline** and **hybrid**. What only the hybrid adds is marked
+**(H)**. The pin assignment must match `omafon/hardware.py`
+(`MCP_KEYS`, `PI_INPUTS`, `PIN_VIBRA`, `PIN_LED`, `PIN_MODEM_PWR`). When changing it,
+always update both places – and both language versions of this page (a test checks
+them). Parts: [stueckliste.md](stueckliste.md).
 
-## 1. Übersicht
+> **Status:** derived from the code, the breakout datasheets and the housing. Not
+> yet measured on a prototype. Check the points marked 🔍 on the first build.
+
+## 1. Overview
 
 ```
-                         ┌──────────── Handteil ────────────────────────────────────┐
- Ladeschale              │                                                          │
+                         ┌──────────── Handset ─────────────────────────────────────┐
+ Cradle                  │                                                          │
  USB-C 5V ──┬─ Pogo 1 ───┼─ Pad 1 ─┬─> bq24074 IN      BAT <── LiPo 1S (JST)        │
             │            │         │        PGOOD ──────────────> GPIO27           │
- GND ───────┼─ Pogo 2+3 ─┼─ Pad 2+3│        SYS ──┬─> Aufwärtswandler 5 V ──> Pi 5 V│
+ GND ───────┼─ Pogo 2+3 ─┼─ Pad 2+3│        SYS ──┬─> boost converter 5 V ──> Pi 5 V│
             │            │         │              ├─> TPA2016 VDD                   │
-            │            │         │              └─> Vibrationsmotor (über MOSFET) │
-            │            │         └─> Relaisspule (nur in der Schale)              │
- LS 50 mm ──┴─ Pogo 4+5 ─┼─ Pad 4+5 ── Relais NO / NC ── LS 28 mm im Handteil      │
+            │            │         │              └─> vibration motor (via MOSFET)  │
+            │            │         └─> relay coil (only in the cradle)              │
+ SPK 50 mm ─┴─ Pogo 4+5 ─┼─ Pad 4+5 ── relay NO / NC ── SPK 28 mm in the handset    │
                          │                    ▲ COM                                 │
-                         │   CM108 ─L/R─> TPA2016 ── OUT R ┘   OUT L ──> Hörkapsel  │
-                         │   (USB)  <─── Elektret-Mikrofon                          │
-                         │   I²C: MCP23017 (Tasten), TPA2016, MAX17048 (Akku)       │
-                         │   GPIO: Notruf, Klappe, Lautstärke, Laden, Vibration, LED│
-                         │   (H) SIM7600-HAT auf der Stiftleiste, Ton über Mischer   │
+                         │   CM108 ─L/R─> TPA2016 ── OUT R ┘   OUT L ──> earpiece   │
+                         │   (USB)  <─── electret microphone                        │
+                         │   I²C: MCP23017 (keys), TPA2016, MAX17048 (battery)      │
+                         │   GPIO: SOS, cover, volume, charging, vibration, LED     │
+                         │   (H) SIM7600 HAT on the header, audio via mixer         │
                          └──────────────────────────────────────────────────────────┘
 ```
 
-## 2. Raspberry Pi Zero 2 W – Pinbelegung
+## 2. Raspberry Pi Zero 2 W – pin assignment
 
-| Pin | BCM | Signal | geht an | Hinweis |
+| Pin | BCM | Signal | goes to | Note |
 |---|---|---|---|---|
-| 1 | – | 3,3 V | MCP23017 VDD + RESET, MAX17048 VIN, Breakout-I²C-Pegel | |
-| 2, 4 | – | 5 V | Ausgang Aufwärtswandler | versorgt Pi und (H) HAT über die Stiftleiste |
-| 6, 9, 14, 20, 25, 30, 34, 39 | – | GND | gemeinsame Masse | mindestens 2 GND-Pins für die 5-V-Zuleitung |
-| 3 | 2 | I²C SDA | MCP23017, TPA2016, MAX17048 | Pull-ups auf dem Pi (1,8 kΩ) und den Breakouts |
-| 5 | 3 | I²C SCL | dito | |
-| 8 / 10 | 14 / 15 | UART TX / RX | (H) SIM7600 über die HAT-Stiftleiste | HAT-Jumper **UART = B**; `serial_port: /dev/ttyAMA0` |
-| 31 | 6 | Modem PWRKEY | (H) HAT-Jumper **PWR → D6** | `PIN_MODEM_PWR`; Festnetz: frei |
-| 7 | 4 | (Flugmodus) | (H) HAT-Jumper **Flight offen lassen** | wird nicht benutzt |
-| 15 | 22 | SOS-Taster | Notruftaster → GND | interner Pull-up |
-| 16 | 23 | Notrufklappe | Reedkontakt → GND | Magnet in der Klappe: zu = geschlossen; im Code invertiert |
-| 18 | 24 | Lauter | 6×6-Taster → GND | interner Pull-up |
-| 22 | 25 | Leiser | 6×6-Taster → GND | interner Pull-up |
-| 13 | 27 | In der Schale | bq24074 **PGOOD** | Open-Drain, low = Strom von der Schale |
-| 32 | 12 | Vibration (PWM) | Gate MOSFET 1 (über 100 Ω) | 10 kΩ Gate → GND |
-| 33 | 13 | LED | Gate MOSFET 2 (über 100 Ω) | 10 kΩ Gate → GND |
-| USB-Buchse „USB“ (nicht „PWR“) | – | USB | CM108-Soundkarte | OTG-Adapter oder direkt an die Testpads PP22 (D+) / PP23 (D−), 5 V, GND 🔍 |
+| 1 | – | 3.3 V | MCP23017 VDD + RESET, MAX17048 VIN, breakout I²C level | |
+| 2, 4 | – | 5 V | boost converter output | powers the Pi and (H) the HAT through the header |
+| 6, 9, 14, 20, 25, 30, 34, 39 | – | GND | common ground | at least 2 GND pins for the 5 V supply |
+| 3 | 2 | I²C SDA | MCP23017, TPA2016, MAX17048 | pull-ups on the Pi (1.8 kΩ) and the breakouts |
+| 5 | 3 | I²C SCL | same | |
+| 8 / 10 | 14 / 15 | UART TX / RX | (H) SIM7600 via the HAT header | HAT jumper **UART = B**; `serial_port: /dev/ttyAMA0` |
+| 31 | 6 | Modem PWRKEY | (H) HAT jumper **PWR → D6** | `PIN_MODEM_PWR`; landline: unused |
+| 7 | 4 | (airplane mode) | (H) HAT jumper **leave Flight open** | not used |
+| 15 | 22 | SOS button | emergency button → GND | internal pull-up |
+| 16 | 23 | Emergency cover | reed contact → GND | magnet in the cover: closed = shut; inverted in code |
+| 18 | 24 | Volume up | 6×6 switch → GND | internal pull-up |
+| 22 | 25 | Volume down | 6×6 switch → GND | internal pull-up |
+| 13 | 27 | In the cradle | bq24074 **PGOOD** | open drain, low = power from the cradle |
+| 32 | 12 | Vibration (PWM) | gate MOSFET 1 (via 100 Ω) | 10 kΩ gate → GND |
+| 33 | 13 | LED | gate MOSFET 2 (via 100 Ω) | 10 kΩ gate → GND |
+| USB socket “USB” (not “PWR”) | – | USB | CM108 sound card | OTG adapter or directly to the test pads PP22 (D+) / PP23 (D−), 5 V, GND 🔍 |
 
-## 3. Tastenfeld (MCP23017, I²C 0x20)
+## 3. Keypad (MCP23017, I²C 0x20)
 
-- **Versorgung:** VDD → 3,3 V, VSS → GND, **RESET → 3,3 V** (sonst zufällige Resets),
-  A0/A1/A2 → GND (Adresse 0x20).
-- **Taster:** Jeder Cherry-MX-Taster hat zwei Pins. Pin 1 geht an seinen
-  MCP-Eingang, Pin 2 an eine gemeinsame **Masse-Schiene**: blanker Draht,
-  der quer über alle Taster gelötet ist. Pull-ups sind im MCP eingeschaltet
-  (Register GPPU). Externe Widerstände sind nicht nötig.
-- Leitungen so kurz wie möglich, verdrillt mit GND, wenn sie länger als 15 cm sind.
+- **Supply:** VDD → 3.3 V, VSS → GND, **RESET → 3.3 V** (otherwise random resets),
+  A0/A1/A2 → GND (address 0x20).
+- **Switches:** every Cherry MX switch has two pins. Pin 1 goes to its MCP input,
+  pin 2 to a common **ground rail**: a bare wire soldered across all switches.
+  Pull-ups are enabled in the MCP (register GPPU). No external resistors needed.
+- Keep wires as short as possible, twisted with GND if longer than 15 cm.
 
-| MCP-Pin | Bit | Taste | | MCP-Pin | Bit | Taste |
+| MCP pin | Bit | Key | | MCP pin | Bit | Key |
 |---|---|---|---|---|---|---|
 | GPA0 | 0 | 1 | | GPB0 | 8 | 9 |
-| GPA1 | 1 | 2 | | GPB1 | 9 | * (Stern) |
+| GPA1 | 1 | 2 | | GPB1 | 9 | * (star) |
 | GPA2 | 2 | 3 | | GPB2 | 10 | 0 |
-| GPA3 | 3 | 4 | | GPB3 | 11 | # (Raute) |
-| GPA4 | 4 | 5 | | GPB4 | 12 | Anrufen (gelb) |
-| GPA5 | 5 | 6 | | GPB5 | 13 | Auflegen (schwarz) |
-| GPA6 | 6 | 7 | | GPB6 | 14 | Nachricht |
+| GPA3 | 3 | 4 | | GPB3 | 11 | # (hash) |
+| GPA4 | 4 | 5 | | GPB4 | 12 | Call (yellow) |
+| GPA5 | 5 | 6 | | GPB5 | 13 | Hang up (black) |
+| GPA6 | 6 | 7 | | GPB6 | 14 | Message |
 | GPA7 | 7 | 8 | | GPB7 | 15 | Info |
 
-Der **Notruftaster** hängt bewusst **nicht** am MCP, sondern direkt an GPIO22.
-Fällt der I²C-Bus aus, funktioniert der Notruf trotzdem (Regel 2 in `CLAUDE.md`).
+The **emergency button** is deliberately **not** on the MCP but directly on GPIO22.
+If the I²C bus fails, the emergency call still works (rule 2 in `CLAUDE.md`).
 
-## 4. Weitere Eingänge
+## 4. Further inputs
 
-| Bauteil | Anschluss | Hinweis |
+| Part | Connection | Note |
 |---|---|---|
-| Notruftaster (MX, in der Notrufmulde) | GPIO22 ↔ GND | Litze durch die Mulde nach innen |
-| Reedkontakt (Kanal neben der Mulde) | GPIO23 ↔ GND | Glas vorsichtig biegen, Beine mindestens 2 mm vom Glas entfernt abwinkeln |
-| Lauter / Leiser (6×6 auf Lochraster in den Schienen) | GPIO24 / GPIO25 ↔ GND | oberer Taster = lauter (Kappe mit Kreuz) |
-| bq24074 PGOOD | GPIO27 | kein externer Pull-up nötig (interner Pull-up des Pi) |
+| Emergency button (MX, in the emergency recess) | GPIO22 ↔ GND | stranded wire through the recess to the inside |
+| Reed contact (channel next to the recess) | GPIO23 ↔ GND | bend the glass carefully, bend the legs at least 2 mm away from the glass |
+| Volume up / down (6×6 on perfboard in the rails) | GPIO24 / GPIO25 ↔ GND | upper switch = louder (cap with cross) |
+| bq24074 PGOOD | GPIO27 | no external pull-up needed (internal pull-up of the Pi) |
 
-## 5. Ausgänge
+## 5. Outputs
 
-**Vibrationsmotor:**
+**Vibration motor:**
 ```
-SYS (3,5–4,2 V) ── Motor + ── Motor − ── Drain MOSFET 1 ── Source ── GND
-                    └─ 1N4148 (Kathode an SYS) ─┘
-GPIO12 ── 100 Ω ── Gate MOSFET 1        Gate ── 10 kΩ ── GND
+SYS (3.5–4.2 V) ── motor + ── motor − ── drain MOSFET 1 ── source ── GND
+                    └─ 1N4148 (cathode to SYS) ─┘
+GPIO12 ── 100 Ω ── gate MOSFET 1        gate ── 10 kΩ ── GND
 ```
-Der Code begrenzt per PWM auf 80 %, damit der 3-V-Motor nicht überlastet wird.
+The code limits PWM to 80 % so the 3 V motor is not overloaded.
 
-**LED (im Hörerkopf, hell aus 5 V):**
+**LED (in the head part, bright from 5 V):**
 ```
-5 V ── 100 Ω ── LED Anode ── LED Kathode ── Drain MOSFET 2 ── Source ── GND
-GPIO13 ── 100 Ω ── Gate MOSFET 2        Gate ── 10 kΩ ── GND
+5 V ── 100 Ω ── LED anode ── LED cathode ── drain MOSFET 2 ── source ── GND
+GPIO13 ── 100 Ω ── gate MOSFET 2        gate ── 10 kΩ ── GND
 ```
-Ergibt ca. 20 mA. Bei hoher Restsehkraft lieber 220 Ω, damit die LED nachts nicht blendet.
-Die Drähte laufen durch das LED-Loch im Deckel in das Lichtrohr des Hörerkopfs.
+That gives about 20 mA. With good residual vision, prefer 220 Ω so the LED doesn’t
+dazzle at night. The wires run through the LED hole in the top into the light pipe
+of the head part.
 
 ## 6. Audio
 
-| Von | Nach | Hinweis |
+| From | To | Note |
 |---|---|---|
-| CM108 Kopfhörer L | TPA2016 IN L (+), GND → IN L (−) | Hörkapsel-Kanal |
-| CM108 Kopfhörer R | TPA2016 IN R (+), GND → IN R (−) | Lautsprecher-Kanal |
-| TPA2016 OUT L+ / L− | Hörkapsel 32 Ω | **Brückenausgang:** kein Ausgang an GND |
-| TPA2016 OUT R+ / R− | Relais **COM** (beide Kontaktsätze) | |
-| Relais **NC** (Ruhe) | Lautsprecher 28 mm im Handteil | Telefon in der Hand |
-| Relais **NO** (Arbeit) | Pad 4 / Pad 5 → Schalenlautsprecher | Telefon in der Schale |
-| Relais Spule | Pad 1 (+5 V aus der Schale) ↔ GND, 1N4148 antiparallel | schaltet ohne Software |
-| Elektret-Mikrofon + / − | CM108 MIC / GND | Vorspannung kommt von der CM108 |
-| TPA2016 VDD / GND / SDA / SCL | SYS / GND / I²C | Adresse 0x58; SHDN → VDD (immer an, Kanäle schaltet die Software) |
+| CM108 headphone L | TPA2016 IN L (+), GND → IN L (−) | earpiece channel |
+| CM108 headphone R | TPA2016 IN R (+), GND → IN R (−) | speaker channel |
+| TPA2016 OUT L+ / L− | earpiece 32 Ω | **bridged output:** no output to GND |
+| TPA2016 OUT R+ / R− | relay **COM** (both contact sets) | |
+| relay **NC** (rest) | speaker 28 mm in the handset | phone in the hand |
+| relay **NO** (active) | pad 4 / pad 5 → cradle speaker | phone in the cradle |
+| relay coil | pad 1 (+5 V from the cradle) ↔ GND, 1N4148 anti-parallel | switches without software |
+| electret microphone + / − | CM108 MIC / GND | bias comes from the CM108 |
+| TPA2016 VDD / GND / SDA / SCL | SYS / GND / I²C | address 0x58; SHDN → VDD (always on, the software switches the channels) |
 
-**(H) Ton vom und zum Modem.** Der SIM7600 hat einen eigenen Audio-Codec am
-4-poligen Klinkenanschluss des HAT (CTIA: Spitze = L, Ring 1 = R, Ring 2 = GND,
-Hülse = Mikrofon). Damit Oma LTE-Gespräche über dieselbe Hörkapsel hört, werden
-beide Quellen passiv gemischt:
+**(H) Audio from and to the modem.** The SIM7600 has its own audio codec on the
+4-pole jack of the HAT (CTIA: tip = L, ring 1 = R, ring 2 = GND, sleeve = microphone).
+So that grandma hears LTE calls through the same earpiece, both sources are mixed
+passively:
 
 ```
 CM108 L ── 10 kΩ ──┬── TPA2016 IN L+          CM108 R ── 10 kΩ ──┬── TPA2016 IN R+
 Modem L ── 10 kΩ ──┘                          Modem R ── 10 kΩ ──┘
-Mikrofon (an CM108 MIC) ── 1 µF ── 10 kΩ ── Modem MIC (Hülse)
+microphone (on CM108 MIC) ── 1 µF ── 10 kΩ ── modem MIC (sleeve)
 ```
 
-🔍 Den Pegel am Muster prüfen und den Mischer ggf. anpassen (z. B. 4,7 kΩ für die
-leisere Quelle). Am Modem-Mikrofon liegt dann zusätzlich dessen eigene
-Vorspannung. Klingt es verzerrt, eine **zweite Elektretkapsel** direkt ans Modem
-legen (Platz ist im Mikrofonhalter).
+🔍 Check the level on the prototype and adjust the mixer if needed (e.g. 4.7 kΩ for the
+quieter source). The modem microphone then also carries its own bias. If it sounds
+distorted, connect a **second electret capsule** directly to the modem (there is room
+in the microphone holder).
 
-## 7. Stromversorgung
+## 7. Power supply
 
-| Von | Nach | Querschnitt |
+| From | To | Cross-section |
 |---|---|---|
-| Pad 1 (+5 V Schale) | bq24074 **IN** und Relaisspule | 0,5 mm² |
-| Pad 2 + 3 | GND | 0,5 mm² |
-| LiPo (JST-PH) | bq24074 **BAT** | 0,5 mm²; der Stecker ist die Trennstelle für Wartung |
-| bq24074 **SYS/OUT** | Aufwärtswandler IN, TPA2016 VDD, Vibrationsmotor | 0,5 mm² |
-| Aufwärtswandler 5 V OUT | Pi Pin 2 + 4, GND an Pin 6 + 14 | 0,5 mm²; (H) Wandler 3 A, Leitungen kurz |
-| LiPo + / − | MAX17048 CELL+ / GND | dünn; misst direkt am Akku |
+| pad 1 (+5 V cradle) | bq24074 **IN** and relay coil | 0.5 mm² |
+| pad 2 + 3 | GND | 0.5 mm² |
+| LiPo (JST-PH) | bq24074 **BAT** | 0.5 mm²; the connector is the disconnect point for maintenance |
+| bq24074 **SYS/OUT** | boost converter IN, TPA2016 VDD, vibration motor | 0.5 mm² |
+| boost converter 5 V OUT | Pi pin 2 + 4, GND to pin 6 + 14 | 0.5 mm²; (H) 3 A converter, short wires |
+| LiPo + / − | MAX17048 CELL+ / GND | thin; measures directly at the battery |
 
-- Der bq24074 lädt aus der Schale und versorgt das Telefon gleichzeitig (Power-Path).
-  🔍 Den Ladestrom auf dem Board auf 1 A einstellen bzw. prüfen.
-- Die 5 V gehen am Pi über die Stiftleiste, also an der Polyfuse vorbei. Deshalb nur
-  den geregelten Wandler anschließen, nie direkt den Akku.
-- (H) Das Modem zieht beim Senden bis 2 A. Deshalb Wandler 3 A, dicke und kurze
-  Leitungen, 470-µF-Elko an den 5-V-Pins des Pi. 🔍 Bei Abstürzen während
-  Gesprächen zuerst die Spannung an Pin 2 beim Senden messen.
+- The bq24074 charges from the cradle and powers the phone at the same time (power path).
+  🔍 Set or check the charging current on the board at 1 A.
+- On the Pi, the 5 V go through the header, i.e. bypassing the polyfuse. So only connect
+  the regulated converter, never the battery directly.
+- (H) The modem draws up to 2 A when transmitting. Hence a 3 A converter, thick and short
+  wires, a 470 µF electrolytic capacitor at the Pi’s 5 V pins. 🔍 If it crashes during
+  calls, first measure the voltage at pin 2 while transmitting.
 
-## 8. Ladeschale
+## 8. Charging cradle
 
-| Von | Nach | Hinweis |
+| From | To | Note |
 |---|---|---|
-| USB-C VBUS | Federkontakt 1 (+5 V) | Kontakt 1 ist am Träger markiert |
-| USB-C GND | Federkontakte 2 und 3 | zwei Kontakte für geringeren Übergangswiderstand |
-| Lautsprecher 50 mm + / − | Federkontakte 4 / 5 | |
-| USB-C CC1 / CC2 | je 5,1 kΩ → GND | auf den meisten Breakouts schon bestückt 🔍 |
+| USB-C VBUS | spring contact 1 (+5 V) | contact 1 is marked on the carrier |
+| USB-C GND | spring contacts 2 and 3 | two contacts for lower contact resistance |
+| speaker 50 mm + / − | spring contacts 4 / 5 | |
+| USB-C CC1 / CC2 | 5.1 kΩ each → GND | already fitted on most breakouts 🔍 |
 
-Kontaktreihenfolge 1–5 **von links bei Blick auf die Vorderseite des Telefons**,
-im Handteil wie in der Schale gleich. Die Kodierrippe verhindert falsches Einstecken.
+Contact order 1–5 **from the left, looking at the front of the phone**, the same in the
+handset and the cradle. The coding rib prevents inserting it the wrong way.
 
-## 9. Erste Inbetriebnahme (vor dem Schließen des Gehäuses)
+## 9. First power-up (before closing the housing)
 
-1. **Ohne Pi:** Akku anstecken, Schale anschließen. Am Wandlerausgang 5,0–5,2 V
-   messen. Das Relais muss klicken, wenn das Handteil in der Schale steht.
-2. Pi anschließen und booten: `i2cdetect -y 1` zeigt **0x20, 0x36, 0x58**.
-3. `aplay -l` / `arecord -l` zeigen die CM108. `speaker-test -D plughw:CARD=Device -c 2`
-   spielt auf Hörkapsel (L) und Lautsprecher (R). Vorher muss Omafon laufen oder der
-   TPA2016 per I²C eingeschaltet sein.
-4. Tasten: Omafon im Vordergrund starten
-   (`python3 -m omafon.main --config /etc/omafon/config.yaml -v`). Jede Taste muss
-   sofort angesagt werden. Den Notruf bei geöffneter Klappe antesten, dabei **vor
-   Ablauf der 3 Sekunden loslassen**.
-5. (H) Modem-Test aus der README (`minicom`, VoLTE-Anruf), danach Ton über den
-   Mischer prüfen.
+1. **Without the Pi:** connect the battery and the cradle. Measure 5.0–5.2 V at the
+   converter output. The relay must click when the handset sits in the cradle.
+2. Connect and boot the Pi: `i2cdetect -y 1` shows **0x20, 0x36, 0x58**.
+3. `aplay -l` / `arecord -l` show the CM108. `speaker-test -D plughw:CARD=Device -c 2`
+   plays on the earpiece (L) and the speaker (R). Omafon must be running first, or the
+   TPA2016 switched on via I²C.
+4. Keys: start Omafon in the foreground
+   (`python3 -m omafon.main --config /etc/omafon/config.yaml -v`). Every key must be
+   announced immediately. Test the emergency call with the cover open, and **release it
+   before the 3 seconds are up**.
+5. (H) Modem test from the README (`minicom`, VoLTE call), then check the audio through
+   the mixer.

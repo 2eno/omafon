@@ -96,23 +96,37 @@ class KeyTrackerTests(unittest.TestCase):
 
 
 class WiringDocTests(unittest.TestCase):
-    """docs/verkabelung.md must match the pin assignment in hardware.py."""
+    """docs/verkabelung.md (English) and docs/verkabelung.de.md (German) must match
+    the pin assignment in hardware.py."""
+
+    LABELS = {
+        "verkabelung.md": {
+            "keys": {"*": "* (star)", "#": "# (hash)", "CALL": "Call (yellow)",
+                     "HANGUP": "Hang up (black)", "MSG": "Message", "INFO": "Info"},
+            "inputs": {"SOS": "SOS button", "SOS_COVER": "Emergency cover", "VOL_UP": "Volume up",
+                       "VOL_DOWN": "Volume down", "CHARGER": "In the cradle"},
+        },
+        "verkabelung.de.md": {
+            "keys": {"*": "* (Stern)", "#": "# (Raute)", "CALL": "Anrufen (gelb)",
+                     "HANGUP": "Auflegen (schwarz)", "MSG": "Nachricht", "INFO": "Info"},
+            "inputs": {"SOS": "SOS-Taster", "SOS_COVER": "Notrufklappe", "VOL_UP": "Lauter",
+                       "VOL_DOWN": "Leiser", "CHARGER": "In der Schale"},
+        },
+    }
 
     def test_pinout_matches_code(self):
         import re
         from omafon import hardware as h
-        doc = (Path(__file__).resolve().parents[1] / "docs" / "verkabelung.md").read_text(encoding="utf-8")
-        names = {"*": "* (Stern)", "#": "# (Raute)", "CALL": "Anrufen (gelb)",
-                 "HANGUP": "Auflegen (schwarz)", "MSG": "Nachricht", "INFO": "Info"}
-        for bit, key in enumerate(h.MCP_KEYS):
-            pin = ("GPA" if bit < 8 else "GPB") + str(bit % 8)
-            self.assertRegex(doc, rf"\| {pin} \| {bit} \| {re.escape(names.get(key, key))} \|")
-        labels = {"SOS": "SOS-Taster", "SOS_COVER": "Notrufklappe", "VOL_UP": "Lauter",
-                  "VOL_DOWN": "Leiser", "CHARGER": "In der Schale"}
-        for pin, key, _inv in h.PI_INPUTS:
-            self.assertRegex(doc, rf"\| {pin} \| {re.escape(labels[key])} \|")
-        for pin, label in ((h.PIN_VIBRA, "Vibration"), (h.PIN_LED, "LED"), (h.PIN_MODEM_PWR, "Modem PWRKEY")):
-            self.assertRegex(doc, rf"\| {pin} \| {label}")
+        for name, labels in self.LABELS.items():
+            with self.subTest(doc=name):
+                doc = (Path(__file__).resolve().parents[1] / "docs" / name).read_text(encoding="utf-8")
+                for bit, key in enumerate(h.MCP_KEYS):
+                    pin = ("GPA" if bit < 8 else "GPB") + str(bit % 8)
+                    self.assertRegex(doc, rf"\| {pin} \| {bit} \| {re.escape(labels['keys'].get(key, key))} \|")
+                for pin, key, _inv in h.PI_INPUTS:
+                    self.assertRegex(doc, rf"\| {pin} \| {re.escape(labels['inputs'][key])} \|")
+                for pin, label in ((h.PIN_VIBRA, "Vibration"), (h.PIN_LED, "LED"), (h.PIN_MODEM_PWR, "Modem PWRKEY")):
+                    self.assertRegex(doc, rf"\| {pin} \| {label}")
 
 
 class PhoneTests(unittest.IsolatedAsyncioTestCase):
