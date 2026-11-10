@@ -1,8 +1,8 @@
-"""Simulator für das Festnetz-Backend: ein nachgebautes baresip (ctrl_tcp)
-und eine simulierte Fritz!Box. Das echte BaresipBackend spricht dabei über
-TCP mit FakeBaresip – getestet wird also der echte Protokollcode.
+"""Simulator for the landline backend: a rebuilt baresip (ctrl_tcp)
+and a simulated Fritz!Box. The real BaresipBackend talks to FakeBaresip over
+TCP – so the real protocol code is what gets tested.
 
-Benutzt von  python -m omafon.main --sim  (backend: sip)  und den Tests.
+Used by  python -m omafon.main --sim  (backend: sip)  and the tests.
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ log = logging.getLogger("omafon.sipsim")
 
 
 class FakeBaresip:
-    """Spricht das ctrl_tcp-Protokoll von baresip (Teilmenge)."""
+    """Speaks baresip's ctrl_tcp protocol (subset)."""
 
     def __init__(self, aor: str = "sip:omafon@fritz.box"):
         self.aor = aor
@@ -30,9 +30,9 @@ class FakeBaresip:
         self.port = 0
         self.writer: asyncio.StreamWriter | None = None
         self.commands: list[tuple[str, str]] = []
-        self.reachable = True        # Fritz!Box erreichbar (Registrierung klappt)
+        self.reachable = True        # Fritz!Box reachable (registration works)
         self.call_id = 0
-        self.fail: set[str] = set()  # Befehle, die mit ok=false antworten
+        self.fail: set[str] = set()  # commands that answer with ok=false
 
     async def start(self) -> int:
         self.server = await asyncio.start_server(self._client, "127.0.0.1", 0)
@@ -46,7 +46,7 @@ class FakeBaresip:
             self.server.close()
 
     async def drop_connection(self) -> None:
-        """Wie ein Absturz von baresip: TCP-Verbindung bricht ab."""
+        """Like a baresip crash: the TCP connection drops."""
         if self.writer:
             self.writer.close()
             self.writer = None
@@ -90,11 +90,11 @@ class FakeBaresip:
         elif cmd == "hangup":
             await self.event("CALL_CLOSED", "Connection reset by user")
 
-    # Netz -> Telefon
+    # network -> phone
     async def incoming(self, number: str) -> None:
         self.call_id += 1
         uri = f"sip:{number}@fritz.box" if number else "sip:anonymous@anonymous.invalid"
-        # Absichtlich ein irreführender Anzeigename: darf NIE angesagt werden.
+        # Deliberately misleading display name: must NEVER be announced.
         await self.event("CALL_INCOMING", uri, direction="incoming", peeruri=uri,
                          peerdisplayname="Ihre Bank")
 
@@ -104,14 +104,14 @@ class FakeBaresip:
 
 
 class LogNotifier:
-    """Statt Telegram/E-Mail: merkt sich die Nachrichten (Simulator, Tests)."""
+    """Instead of Telegram/e-mail: remembers the messages (simulator, tests)."""
 
     def __init__(self, cfg, enabled: bool = True, echo: bool = True):
         self.cfg, self.enabled, self.echo = cfg, enabled, echo
-        self.sent: list[tuple[str, str, str]] = []   # (Name, Nummer, Text)
+        self.sent: list[tuple[str, str, str]] = []   # (name, number, text)
 
     def can_reach(self, number: str) -> bool:
-        """Wie Notifier: nur Kontakte mit Telegram-Chat-ID oder E-Mail."""
+        """Like Notifier: only contacts with a Telegram chat ID or e-mail."""
         c = self.cfg.by_number(number)
         return bool(self.enabled and c and (c.telegram_chat_id or c.email))
 
@@ -147,12 +147,12 @@ class SimBaresipBackend(BaresipBackend):
 
 
 class SipSimulator:
-    """Steuerung für Simulator-Konsole und Tests (gleiche Methoden wie SimModem)."""
+    """Control for the simulator console and tests (same methods as SimModem)."""
 
     def __init__(self, cfg, echo: bool = True, phonebook: dict[str, str] | None = None):
         self.cfg = cfg
         self.server = FakeBaresip()
-        if phonebook is None:                  # Beispiel: Telefonbuch der Fritz!Box
+        if phonebook is None:                  # example: Fritz!Box phone book
             phonebook = {"+491711234567": "Peter", "06990009100": "Frau Schmidt von nebenan"}
         self.fritz = SimFritzBox(phonebook, cfg.country_code)
         self.notifier = LogNotifier(cfg, echo=echo)
@@ -165,12 +165,12 @@ class SipSimulator:
     def _bg(self, coro) -> None:
         asyncio.get_running_loop().create_task(coro)
 
-    # gleiche Namen wie SimModem
+    # same names as SimModem
     def inject_call(self, number: str) -> None:
         self._bg(self.server.incoming(number))
 
     def inject_sms(self, sender: str, text: str = "") -> None:
-        """Legt eine Nachricht auf den Fritz!Box-AB und lässt sofort abfragen."""
+        """Puts a message on the Fritz!Box answering machine and queries right away."""
         name = self.fritz.book.get(normalize(sender, self.cfg.country_code), "")
         self.fritz.add_message(sender, tone_wav(), name)
         if self.sip:

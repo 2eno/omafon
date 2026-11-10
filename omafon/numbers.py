@@ -1,10 +1,10 @@
-"""Hilfen rund um Telefonnummern und deutsche Ansagen."""
+"""Helpers for phone numbers and German announcements."""
 from __future__ import annotations
 
 import datetime as _dt
 import re
 
-# "zwo" statt "zwei": am Telefon nicht mit "drei" zu verwechseln.
+# "zwo" instead of "zwei": on the phone it can't be confused with "drei".
 DIGIT_WORDS = {
     "0": "null", "1": "eins", "2": "zwo", "3": "drei", "4": "vier",
     "5": "fünf", "6": "sechs", "7": "sieben", "8": "acht", "9": "neun",
@@ -17,7 +17,7 @@ MONTHS = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli",
 
 
 def normalize(number: str, country_code: str = "49") -> str:
-    """+49 171 … / 0049171… / 0171… -> 0171… (nur zum Vergleichen)."""
+    """+49 171 … / 0049171… / 0171… -> 0171… (for comparison only)."""
     n = re.sub(r"[^\d+*#]", "", number or "")
     if n.startswith("+" + country_code):
         n = "0" + n[1 + len(country_code):]
@@ -29,7 +29,7 @@ def normalize(number: str, country_code: str = "49") -> str:
 def spoken_number(number: str) -> str:
     """'01711234567' -> 'null eins sieben eins, eins zwo drei, vier fünf sechs, sieben'.
 
-    Kommas erzeugen in der Sprachausgabe kurze Pausen.
+    Commas produce short pauses in the speech output.
     """
     chars = [c for c in number if c in DIGIT_WORDS]
     if not chars:

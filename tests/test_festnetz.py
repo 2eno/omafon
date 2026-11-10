@@ -1,7 +1,7 @@
-"""Tests für das Festnetz-Backend (SIP über die Fritz!Box) – ohne Hardware und Netz.
+"""Tests for the landline backend (SIP via the Fritz!Box) – without hardware and network.
 
-Das echte BaresipBackend spricht über TCP mit FakeBaresip (nachgebautes
-ctrl_tcp von baresip); die Fritz!Box ist SimFritzBox.
+The real BaresipBackend talks over TCP to FakeBaresip (a rebuilt ctrl_tcp of
+baresip); the Fritz!Box is SimFritzBox.
 
     python3 -m unittest discover -s tests -v
 """
@@ -87,7 +87,7 @@ class HelperTests(unittest.TestCase):
     def test_example_configs_have_no_real_secrets(self):
         for name in ("config.festnetz.example.yaml", "config.hybrid.example.yaml"):
             text = (CFG.parent / name).read_text(encoding="utf-8")
-            self.assertNotRegex(text, r"\d{6,}:[A-Za-z0-9_-]{30,}")      # Telegram-Token
+            self.assertNotRegex(text, r"\d{6,}:[A-Za-z0-9_-]{30,}")      # Telegram token
             for line in text.splitlines():
                 if "password:" in line:
                     self.assertRegex(line, r"PLATZHALTER|null")
@@ -101,7 +101,7 @@ class HelperTests(unittest.TestCase):
             self.assertEqual(b.name, "sip")
             self.assertIsInstance(b, TelephonyBackend)
             self.assertIsInstance(ctl, SipSimulator)
-            cfg.backend = "sim7600"              # reines Handy gibt es nicht mehr
+            cfg.backend = "sim7600"              # a pure mobile phone no longer exists
             with self.assertRaises(ValueError):
                 create_backend(cfg, q, loop, sim=True)
             cfg.backend = "isdn"
@@ -137,7 +137,7 @@ class NotifierTests(unittest.IsolatedAsyncioTestCase):
 
         n = Notifier(cfg, opener=opener)
         self.assertTrue(n.can_reach("+491711234567"))
-        self.assertFalse(n.can_reach("+491525550000"))     # Enkel: kein Weg eingerichtet
+        self.assertFalse(n.can_reach("+491525550000"))     # grandchild: no path set up
         await n.send_to_number("+491711234567", "NOTRUF von Oma Erika!")
         self.assertEqual(seen[0][0], "https://api.telegram.org/botTESTTOKEN/sendMessage")
         self.assertIn("chat_id=4711", seen[0][1])
@@ -152,7 +152,7 @@ class NotifierTests(unittest.IsolatedAsyncioTestCase):
 
 
 class Base(unittest.IsolatedAsyncioTestCase):
-    """Gemeinsamer Aufbau: echtes BaresipBackend gegen FakeBaresip."""
+    """Shared setup: real BaresipBackend against FakeBaresip."""
 
     async def asyncSetUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -207,13 +207,13 @@ class BackendTests(Base):
         evs = self.drain()
         self.assertEqual(evs[:2], [("ring", ""), ("clip", "+491711234567")])
         self.assertIn(("ring", ""), evs[2:])
-        self.assertIn("stopringing", self.commands())       # baresip klingelt nicht selbst
+        self.assertIn("stopringing", self.commands())       # baresip doesn't ring itself
         await self.backend.answer()
         self.assertTrue(await self.until(lambda: not self.q.empty()))
         await asyncio.sleep(0.1)
         evs = self.drain()
         self.assertIn(("call_begin", ""), evs)
-        self.assertNotIn(("ring", ""), evs[evs.index(("call_begin", "")) + 1:])  # Wiederholung aus
+        self.assertNotIn(("ring", ""), evs[evs.index(("call_begin", "")) + 1:])  # repetition off
         await self.sim.server.event("CALL_CLOSED", "Connection reset by peer")
         self.assertTrue(await self.until(lambda: not self.q.empty()))
         self.assertEqual(self.drain(), [("call_end", "")])
@@ -233,20 +233,20 @@ class BackendTests(Base):
         await self.sim.server.set_reachable(False)
         self.assertTrue(await self.until(lambda: not self.backend.online))
         await self.backend.check_link()
-        self.assertEqual(self.drain(), [])                  # Schonfrist: noch keine Ansage
+        self.assertEqual(self.drain(), [])                  # grace period: no announcement yet
         self.t += 11
         await self.backend.check_link()
         self.assertEqual(self.drain(), [("link_lost", "")])
         n_uareg = self.commands().count("uareg")
         with self.assertRaises(ModemError):
-            await self.backend.dial("0301234")              # offline: sofort Fehler
-        self.t += 50                                        # 61 s weg -> neu registrieren
+            await self.backend.dial("0301234")              # offline: error right away
+        self.t += 50                                        # gone for 61 s -> re-register
         await self.backend.check_link()
-        self.assertEqual(self.drain(), [])                  # nur einmal ansagen
+        self.assertEqual(self.drain(), [])                  # announce only once
         self.assertEqual(self.commands().count("uareg"), n_uareg + 1)
         self.t += 5
         await self.backend.check_link()
-        self.assertEqual(self.commands().count("uareg"), n_uareg + 1)   # nicht bei jedem Takt
+        self.assertEqual(self.commands().count("uareg"), n_uareg + 1)   # not on every tick
         await self.sim.server.set_reachable(True)
         self.assertTrue(await self.until(lambda: self.backend.online))
         self.assertEqual(self.drain(), [("link_ok", "")])
@@ -276,12 +276,12 @@ class BackendTests(Base):
         await self.sim.server.drop_connection()
         self.assertTrue(await self.until(lambda: not self.backend.connected))
         self.assertIn(("call_end", ""), self.drain())
-        await self.backend.check_link()                     # Überwachung verbindet neu
+        await self.backend.check_link()                     # monitoring reconnects
         self.assertTrue(await self.until(lambda: self.backend.online))
 
     async def test_tam_poll_marks_and_stores_audio(self):
         self.sim.fritz.add_message("01609876543", b"RIFF....WAVEfmt ", "Maria")
-        # Der Hintergrundabruf läuft parallel – egal wer zuerst holt: genau einmal.
+        # The background fetch runs in parallel – no matter who fetches first: exactly once.
         await asyncio.gather(self.backend.poll_tam(), self.backend.poll_tam())
         self.assertEqual(await self.backend.poll_tam(), 0)
         evs = [e for e in self.drain() if e[0] == "sms"]
@@ -297,11 +297,11 @@ class BackendTests(Base):
         self.sim.fritz.fail = True
         with self.assertRaises(OSError):
             await self.backend.refresh_phonebook()
-        self.assertEqual(self.cfg.name_for("06990009100"), "Frau Schmidt von nebenan")  # bleibt
+        self.assertEqual(self.cfg.name_for("06990009100"), "Frau Schmidt von nebenan")  # stays
 
 
 class FestnetzPhoneTests(Base):
-    """Phone unverändert benutzt – nur mit dem SIP-Backend."""
+    """Phone used unchanged – just with the SIP backend."""
 
     async def asyncSetUp(self):
         await super().asyncSetUp()
@@ -358,7 +358,7 @@ class FestnetzPhoneTests(Base):
         self.sim.inject_call("06990009100")
         self.assertTrue(await self.pump_until(lambda: "Anruf von" in self.said()))
         self.assertIn("Anruf von Frau Schmidt von nebenan.", self.said())
-        self.assertNotIn("Bank", self.said())              # SIP-Anzeigename wird ignoriert
+        self.assertNotIn("Bank", self.said())              # SIP display name is ignored
         await self.press("CALL")
         self.assertTrue(await self.pump_until(lambda: self.phone.state == S.IN_CALL))
         self.assertIn("accept", self.commands())
@@ -377,7 +377,7 @@ class FestnetzPhoneTests(Base):
     async def test_voicemail_is_signalled_then_played_on_key(self):
         self.sim.inject_sms("01609876543")
         self.assertTrue(await self.pump_until(lambda: "<gong>" in self.audio.spoken))
-        self.assertNotIn(P["voicemail"], self.said())      # nicht automatisch
+        self.assertNotIn(P["voicemail"], self.said())      # not automatically
         self.assertEqual(self.sim.fritz.marked, [0])
         await self.press("MSG")
         self.assertTrue(await self.pump_until(lambda: any(s.startswith("<abspielen") for s in self.audio.spoken)))
@@ -397,12 +397,12 @@ class FestnetzPhoneTests(Base):
             await self.press(d)
         await self.press("CALL")
         await self.pump()
-        self.assertIn(P["link_lost"], self.said())          # nie stumm
+        self.assertIn(P["link_lost"], self.said())          # never silent
         self.assertNotIn("dial", self.commands())
         await self.press("INFO")
         await self.pump()
         self.assertIn("Keine Verbindung zur Fritzbox.", self.said())
-        self.audio.spoken.clear()                            # Erinnerung nach 10 min
+        self.audio.spoken.clear()                            # reminder after 10 min
         self.clock += dt.timedelta(minutes=10)
         self.q.put_nowait("tick")
         await self.pump()
@@ -419,19 +419,19 @@ class FestnetzPhoneTests(Base):
         await self.pump()
         self.q.put_nowait("tick")
         await self.pump()
-        self.assertNotIn(P["link_lost"], self.said())      # nachts nicht wecken
+        self.assertNotIn(P["link_lost"], self.said())      # don't wake anyone at night
         await self.press("1")
         await self.press("CALL")
         await self.pump()
-        self.assertIn(P["link_lost"], self.said())          # aber auf Tastendruck sofort
+        self.assertIn(P["link_lost"], self.said())          # but immediately on a key press
         self.audio.spoken.clear()
-        self.clock = dt.datetime(2026, 11, 2, 7, 1)          # Ruhezeit vorbei
+        self.clock = dt.datetime(2026, 11, 2, 7, 1)          # quiet hours over
         self.q.put_nowait("tick")
         await self.pump()
         self.assertIn(P["link_lost"], self.said())
 
     async def test_sos_chain_ends_with_112_and_pushes_instead_of_sms(self):
-        self.cfg.contacts[0].telegram_chat_id = 1     # Peter und Maria per Telegram erreichbar
+        self.cfg.contacts[0].telegram_chat_id = 1     # Peter and Maria reachable via Telegram
         self.cfg.contacts[1].telegram_chat_id = 2
         self.q.put_nowait(KeyEvent("SOS", "down"))
         self.q.put_nowait(KeyEvent("SOS", "long"))
@@ -439,12 +439,12 @@ class FestnetzPhoneTests(Base):
         self.assertTrue(await self.pump_until(lambda: "sip:112@fritz.box" in dials(), 3000))
         self.assertEqual(dials(), ["sip:+491711234567@fritz.box", "sip:+491609876543@fritz.box",
                                    "sip:+491525550000@fritz.box", "sip:112@fritz.box"])
-        self.sim.inject("call_begin")                      # Leitstelle nimmt an
+        self.sim.inject("call_begin")                      # dispatch center answers
         self.assertTrue(await self.pump_until(lambda: self.phone.call and self.phone.call.answered.is_set()))
         self.sim.inject("call_end")
         self.assertTrue(await self.pump_until(lambda: P["sos_done"] in self.said()))
         sent = {name for name, _, _ in self.sim.notifier.sent}
-        self.assertEqual(sent, {"Peter", "Maria"})         # Enkel hat keinen Weg -> nur Log
+        self.assertEqual(sent, {"Peter", "Maria"})         # grandchild has no path -> log only
         self.assertTrue(all("NOTRUF von Oma Erika" in t for _, _, t in self.sim.notifier.sent))
 
     async def test_lift_answers_and_dock_hangs_up(self):
@@ -452,13 +452,13 @@ class FestnetzPhoneTests(Base):
         self.sim.inject_call("+491711234567")
         self.assertTrue(await self.pump_until(lambda: self.phone.state == S.RINGING))
         self.hw.charging = False
-        self.q.put_nowait(KeyEvent("CHARGER", "up"))         # abheben
+        self.q.put_nowait(KeyEvent("CHARGER", "up"))         # lift
         await self.pump()
         self.assertTrue(await self.pump_until(lambda: "accept" in self.commands()))
         self.assertEqual(self.phone.state, S.IN_CALL)
         self.assertEqual(self.audio.route_mode, "earpiece")
         self.hw.charging = True
-        self.q.put_nowait(KeyEvent("CHARGER", "down"))       # zurück in die Schale
+        self.q.put_nowait(KeyEvent("CHARGER", "down"))       # back into the cradle
         await self.pump()
         self.assertEqual(self.phone.state, S.IDLE)
         self.assertIn("hangup", self.commands())
@@ -467,13 +467,13 @@ class FestnetzPhoneTests(Base):
         self.hw.charging = True
         self.sim.inject_call("+491711234567")
         self.assertTrue(await self.pump_until(lambda: self.phone.state == S.RINGING))
-        await self.press("CALL")                             # Taste statt Abheben
+        await self.press("CALL")                             # key instead of lifting
         self.assertEqual(self.audio.route_mode, "speaker")
         self.assertTrue(self.phone.call.speaker)
 
     async def test_dictation_goes_out_as_push_message(self):
         self.cfg.notify = {"enabled": True}
-        self.cfg.contacts[2].telegram_chat_id = 3            # Enkel
+        self.cfg.contacts[2].telegram_chat_id = 3            # grandchild
         self.stt.answers.put_nowait("enkel")
         self.stt.answers.put_nowait("ich habe die tabletten genommen")
         await self.press("MSG", long=True)
@@ -488,7 +488,7 @@ class FestnetzPhoneTests(Base):
         self.assertTrue(await self.pump_until(lambda: P["no_sending"] in self.said()))
         self.assertEqual(self.phone.state, S.IDLE)
         self.sim.notifier.enabled = True
-        self.stt.answers.put_nowait("doktor")                # Doktor Weber: keine Chat-ID
+        self.stt.answers.put_nowait("doktor")                # Doktor Weber: no chat ID
         await self.press("MSG", long=True)
         self.assertTrue(await self.pump_until(lambda: P["no_sending_to"] in self.said()))
 

@@ -1,4 +1,4 @@
-"""Konfiguration aus config.yaml laden."""
+"""Load the configuration from config.yaml."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -11,14 +11,14 @@ from .numbers import normalize
 
 @dataclass
 class Contact:
-    name: str                       # so wird der Name angesagt
+    name: str                       # this is how the name is announced
     number: str
-    speed_dial: int | None = None   # Taste 1–9 lang drücken
-    emergency: int | None = None    # Reihenfolge in der Notrufkette (1 = zuerst)
-    spoken: list[str] = field(default_factory=list)  # Wörter für die Spracherkennung
-    admin: bool = False             # darf Status-SMS anfordern
-    telegram_chat_id: int | str | None = None   # Festnetz: Notruf/Nachrichten per Telegram
-    email: str | None = None                    # Festnetz: Notruf/Nachrichten per E-Mail
+    speed_dial: int | None = None   # long press on key 1–9
+    emergency: int | None = None    # position in the emergency chain (1 = first)
+    spoken: list[str] = field(default_factory=list)  # words for speech recognition
+    admin: bool = False             # may request status SMS
+    telegram_chat_id: int | str | None = None   # landline: emergency/messages via Telegram
+    email: str | None = None                    # landline: emergency/messages via e-mail
 
     def words(self) -> list[str]:
         return [w.lower() for w in (self.spoken or [self.name])]
@@ -27,20 +27,20 @@ class Contact:
 @dataclass
 class Config:
     owner_name: str = "Oma"
-    backend: str = "sip"                     # "sip" (Fritz!Box) oder "hybrid" (Fritz!Box + Mobilfunk)
+    backend: str = "sip"                     # "sip" (Fritz!Box) or "hybrid" (Fritz!Box + mobile)
     country_code: str = "49"
     contacts: list[Contact] = field(default_factory=list)
     emergency_ring_seconds: int = 30
     emergency_rounds: int = 2
     emergency_callback_minutes: int = 30
     quiet_hours: tuple[int, int] = (22, 7)
-    news_signal_minutes: int = 10            # Gong-Erinnerung bei ungelesenen SMS (0 = nur einmal)
-    news_led: bool = True                    # LED blinkt bei ungelesenen SMS
-    default_route: str = "earpiece"          # "earpiece" oder "speaker"
+    news_signal_minutes: int = 10            # gong reminder for unread SMS (0 = only once)
+    news_led: bool = True                    # LED blinks for unread SMS
+    default_route: str = "earpiece"          # "earpiece" or "speaker"
     volume: int = 4                          # 1..5
     entry_timeout_s: int = 20
     long_press_s: float = 1.2
-    hangup_hold_s: float = 0.5               # im Gespräch: Auflegen erst nach so langem Halten (0 = sofort)
+    hangup_hold_s: float = 0.5               # during a call: hang up only after holding this long (0 = immediately)
     sos_hold_s: float = 3.0
     sos_cancel_window_s: float = 5.0
     # Audio
@@ -48,31 +48,31 @@ class Config:
     cache_dir: str = "/var/cache/omafon"
     piper_bin: str = "piper"
     piper_model: str = "/opt/omafon/voices/de_DE-thorsten-medium.onnx"
-    speech_rate: float = 1.2                 # >1 = langsamer (Piper length_scale)
-    # Spracherkennung
+    speech_rate: float = 1.2                 # >1 = slower (Piper length_scale)
+    # speech recognition
     vosk_model: str = "/opt/omafon/vosk-model-small-de-0.15"
     mic_device: str = "default"
-    remote_stt_url: str | None = None        # z. B. http://10.8.0.1:9000/stt (Whisper)
+    remote_stt_url: str | None = None        # e.g. http://10.8.0.1:9000/stt (Whisper)
     dictation_silence_s: float = 2.5
     dictation_max_s: float = 40.0
     # Hardware
     serial_port: str = "/dev/ttyAMA0"
     serial_baud: int = 115200
     data_dir: str = "/data/omafon"
-    # Festnetz (backend: sip) – Schlüssel siehe omafon/sip.py, fritz.py, notify.py
+    # landline (backend: sip) – keys see omafon/sip.py, fritz.py, notify.py
     sip: dict = field(default_factory=dict)
     fritz: dict = field(default_factory=dict)
     notify: dict = field(default_factory=dict)
-    hybrid: dict = field(default_factory=dict)      # Schlüssel siehe omafon/hybrid.py
-    phonebook: dict = field(default_factory=dict)   # Nummer -> Name (wird aus der Fritz!Box geladen)
-    home_position: list[float] | None = None        # [Breite, Länge] für den Notruf-Hinweis, optional
-    link_reminder_minutes: int = 10                  # Verbindung weg: Ansage wiederholen
-    # Ladeschale
-    answer_on_lift: bool = False             # Abheben aus der Schale nimmt den Anruf an
-    dock_in_call: str = "ignore"             # Einstellen im Gespräch: ignore | hangup | handsfree
-    dock_speaker: bool = False               # Schale hat Lautsprecher: dort freisprechen
+    hybrid: dict = field(default_factory=dict)      # keys see omafon/hybrid.py
+    phonebook: dict = field(default_factory=dict)   # number -> name (loaded from the Fritz!Box)
+    home_position: list[float] | None = None        # [latitude, longitude] for the emergency notice, optional
+    link_reminder_minutes: int = 10                  # connection lost: repeat the announcement
+    # cradle
+    answer_on_lift: bool = False             # lifting from the cradle answers the call
+    dock_in_call: str = "ignore"             # putting down during a call: ignore | hangup | handsfree
+    dock_speaker: bool = False               # the cradle has a speaker: hands-free there
 
-    # ---- Abfragen
+    # ---- Queries
     def by_number(self, number: str) -> Contact | None:
         n = normalize(number, self.country_code)
         for c in self.contacts:
@@ -94,7 +94,7 @@ class Config:
         return sorted((c for c in self.contacts if c.emergency), key=lambda c: c.emergency)
 
     def name_for(self, number: str) -> str | None:
-        """Name aus den Kontakten, sonst aus dem Fritz!Box-Telefonbuch."""
+        """Name from the contacts, otherwise from the Fritz!Box phone book."""
         c = self.by_number(number)
         if c:
             return c.name

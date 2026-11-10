@@ -1,21 +1,21 @@
-"""Backend "sip": Festnetz über die Fritz!Box als IP-Telefon (WLAN).
+"""Backend "sip": landline via the Fritz!Box as an IP phone (Wi-Fi).
 
-Telefonie macht baresip (apt install baresip). Omafon startet es als
-Kindprozess und steuert es über das Modul ctrl_tcp: JSON in Netstrings,
-Befehle dial/accept/hangup/sndcode, Ereignisse REGISTER_OK, CALL_INCOMING,
-CALL_ESTABLISHED, CALL_CLOSED … (Namen aus baresip src/bevent.c).
+Telephony is done by baresip (apt install baresip). Omafon starts it as a
+child process and controls it through the ctrl_tcp module: JSON in netstrings,
+commands dial/accept/hangup/sndcode, events REGISTER_OK, CALL_INCOMING,
+CALL_ESTABLISHED, CALL_CLOSED … (names from baresip src/bevent.c).
 
-Zusätzlich:
-  * Anrufbeantworter der Fritz!Box per TR-064 abfragen (omafon/fritz.py) –
-    neue Nachrichten erscheinen bei Phone wie eine SMS mit Audiodatei.
-  * Telefonbuch der Fritz!Box in cfg.phonebook laden (Namensansage).
-  * Verbindung überwachen: link_lost/link_ok an Phone, selbsttätiger
-    Wiederaufbau (baresip neu starten, neu registrieren, WLAN neu verbinden).
-  * "SMS" (Notruf-Hinweis, Diktat) über Telegram/E-Mail (omafon/notify.py).
+In addition:
+  * Query the Fritz!Box answering machine via TR-064 (omafon/fritz.py) –
+    new messages appear to Phone like an SMS with an audio file.
+  * Load the Fritz!Box phone book into cfg.phonebook (name announcement).
+  * Monitor the connection: link_lost/link_ok to Phone, automatic recovery
+    (restart baresip, re-register, reconnect Wi-Fi).
+  * "SMS" (emergency notice, dictation) via Telegram/e-mail (omafon/notify.py).
 
-Sicherheitshinweis: Namen werden NUR aus dem Fritz!Box-Telefonbuch und den
-Kontakten angesagt, nie aus dem SIP-Anzeigenamen des Anrufers – den kann ein
-Anrufer frei setzen ("Polizei", "Ihre Bank").
+Security note: names are announced ONLY from the Fritz!Box phone book and the
+contacts, never from the caller's SIP display name – a caller can set that
+freely ("Police", "Your bank").
 """
 from __future__ import annotations
 
@@ -37,32 +37,32 @@ log = logging.getLogger("omafon.sip")
 
 SIP_DEFAULTS = {
     "registrar": "fritz.box",
-    "user": "",                  # Benutzername des IP-Telefons in der Fritz!Box
+    "user": "",                  # user name of the IP phone in the Fritz!Box
     "password": "",
     "baresip_bin": "baresip",
     "ctrl_port": 4444,
-    "regint": 300,               # Sekunden zwischen Neuregistrierungen
-    "link_grace_s": 10,          # so lange darf die Verbindung weg sein, bevor angesagt wird
-    "reregister_s": 60,          # danach baresip neu registrieren lassen
-    "restart_s": 120,            # danach baresip neu starten
-    "wifi_reset_s": 180,         # danach WLAN neu verbinden (wifi_reset_cmd)
+    "regint": 300,               # seconds between re-registrations
+    "link_grace_s": 10,          # the connection may be gone this long before it is announced
+    "reregister_s": 60,          # then let baresip re-register
+    "restart_s": 120,            # then restart baresip
+    "wifi_reset_s": 180,         # then reconnect Wi-Fi (wifi_reset_cmd)
     "wifi_reset_cmd": "nmcli radio wifi off && sleep 2 && nmcli radio wifi on",
     "wifi_iface": "wlan0",
-    "ring_repeat_s": 3,          # "ring" an Phone wiederholen, solange es klingelt
+    "ring_repeat_s": 3,          # repeat "ring" to Phone while it rings
 }
 FRITZ_DEFAULTS = {
     "host": "fritz.box",
-    "user": "",                  # Fritz!Box-Benutzer für TR-064
+    "user": "",                  # Fritz!Box user for TR-064
     "password": "",
-    "tam": 0,                    # Anrufbeantworter-Nummer (0 = erster)
+    "tam": 0,                    # answering machine number (0 = first)
     "phonebook_id": 0,
     "tam_poll_s": 60,
     "phonebook_refresh_s": 1800,
-    "tam_after_fetch": "mark",   # mark = als gehört markieren, delete, keep
+    "tam_after_fetch": "mark",   # mark = mark as listened, delete, keep
 }
 
 
-# ------------------------------------------------------------------ Hilfen
+# ------------------------------------------------------------------ Helpers
 def ns_encode(obj: dict) -> bytes:
     data = json.dumps(obj, ensure_ascii=False).encode("utf-8")
     return str(len(data)).encode() + b":" + data + b","
@@ -83,7 +83,7 @@ _URI_USER = re.compile(r"^(?:sips?|tel):([^@;>]+)")
 
 
 def peer_number(uri: str) -> str:
-    """'sip:+491711234567@fritz.box' -> '+491711234567'; anonym -> ''."""
+    """'sip:+491711234567@fritz.box' -> '+491711234567'; anonymous -> ''."""
     uri = (uri or "").strip().strip("<>")
     m = _URI_USER.match(uri)
     user = m.group(1) if m else ""
@@ -101,18 +101,18 @@ def close_kind(reason: str) -> str:
 
 
 def dbm_to_csq(dbm: float) -> int:
-    """WLAN-Pegel (dBm) auf die 0..31-Skala von AT+CSQ abbilden."""
+    """Map the Wi-Fi level (dBm) to the 0..31 scale of AT+CSQ."""
     return max(0, min(31, round((dbm + 90) * 31 / 40)))
 
 
 @dataclass
 class VoiceMessage(pdu.Deliver):
-    """Anrufbeantworter-Nachricht – für Phone eine 'SMS' mit Audiodatei."""
+    """Answering machine message – an 'SMS' with an audio file for Phone."""
     audio: str = ""
 
 
 def baresip_files(cfg, sip: dict) -> dict[str, str]:
-    """Inhalt von config und accounts für baresip (Passwort nur in accounts)."""
+    """Contents of config and accounts for baresip (password only in accounts)."""
     dev = cfg.audio_device
     config = f"""# von Omafon erzeugt – nicht von Hand ändern
 poll_method\t\tepoll
@@ -186,10 +186,10 @@ class BaresipBackend(TelephonyBackend):
         self.store: dict[int, VoiceMessage] = {}
         self._next_idx = 0
         self._seen: set[tuple] = set()
-        self._tam_lock = asyncio.Lock()   # nie zwei Abfragen gleichzeitig (sonst doppelt)
-        self.log: list[str] = []      # gesendete Befehle (für Tests/Simulator)
+        self._tam_lock = asyncio.Lock()   # never two queries at once (otherwise duplicates)
+        self.log: list[str] = []      # commands sent (for tests/simulator)
 
-    # ------------------------------------------------------------ Eigenschaften
+    # ------------------------------------------------------------ Properties
     @property
     def supports_sms(self) -> bool:  # type: ignore[override]
         return self.notifier.enabled
@@ -199,7 +199,7 @@ class BaresipBackend(TelephonyBackend):
         return self.connected and self.registered and self.wifi_up
 
     def _read_wifi_up(self) -> bool:
-        """WLAN-Schnittstelle verbunden? Fehlt die Datei (PC, Tests), gilt: ja."""
+        """Wi-Fi interface connected? If the file is missing (PC, tests): yes."""
         if not self.operstate_path:
             return True
         try:
@@ -218,13 +218,13 @@ class BaresipBackend(TelephonyBackend):
         return "Verbindung zur Fritzbox schwach."
 
     def _emit(self, kind: str, data: str = "") -> None:
-        log.info("Ereignis %s %s", kind, data)
+        log.info("Event %s %s", kind, data)
         self.events.put_nowait(ModemEvent(kind, data))
 
-    # ------------------------------------------------------------ Start/Stopp
+    # ------------------------------------------------------------ Start/stop
     async def start(self) -> None:
-        """Startet baresip und die Überwachung. Wirft nie: fehlt die Verbindung,
-        meldet die Überwachung link_lost und baut sie selbst wieder auf."""
+        """Starts baresip and the monitoring. Never raises: if the connection is
+        missing, the monitoring reports link_lost and restores it itself."""
         if self.spawn:
             await self._spawn()
         await self._connect()
@@ -246,10 +246,10 @@ class BaresipBackend(TelephonyBackend):
         if self.proc and self.proc.returncode is None:
             return
         if not shutil.which(self.sip["baresip_bin"]):
-            log.error("baresip fehlt (sudo apt install baresip)")
+            log.error("baresip missing (sudo apt install baresip)")
             return
         if not self.sip["user"] or not self.sip["password"]:
-            log.error("sip.user/sip.password fehlen in config.yaml")
+            log.error("sip.user/sip.password missing in config.yaml")
         d = Path(self.cfg.data_dir) / "baresip"
         d.mkdir(parents=True, exist_ok=True)
         os.chmod(d, 0o700)
@@ -260,7 +260,7 @@ class BaresipBackend(TelephonyBackend):
         self.proc = await asyncio.create_subprocess_exec(
             self.sip["baresip_bin"], "-f", str(d), stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
-        log.info("baresip gestartet (pid %s)", self.proc.pid)
+        log.info("baresip started (pid %s)", self.proc.pid)
 
     async def _connect(self, attempts: int = 10) -> bool:
         for _ in range(attempts):
@@ -268,8 +268,8 @@ class BaresipBackend(TelephonyBackend):
                 self.reader, self.writer = await asyncio.open_connection(self.host, self.port)
                 self.connected = True
                 self._tasks.append(asyncio.create_task(self._read_loop(), name="sip-reader"))
-                log.info("ctrl_tcp verbunden")
-                # Registrierungsstand ist unbekannt -> neu registrieren lassen
+                log.info("ctrl_tcp connected")
+                # registration state is unknown -> have it re-register
                 try:
                     await self._send("uareg", str(int(self.sip["regint"])))
                 except ModemError:
@@ -281,7 +281,7 @@ class BaresipBackend(TelephonyBackend):
         self._link_changed()
         return False
 
-    # ------------------------------------------------------------ Protokoll
+    # ------------------------------------------------------------ Protocol
     async def _send(self, command: str, params: str = "", timeout: float = 5) -> str:
         if not self.connected or not self.writer:
             raise ModemError("Keine Verbindung zu baresip")
@@ -312,13 +312,13 @@ class BaresipBackend(TelephonyBackend):
                 elif msg.get("event"):
                     await self._on_event(msg)
         except (asyncio.IncompleteReadError, ConnectionError, ValueError) as e:
-            log.warning("ctrl_tcp getrennt: %r", e)
+            log.warning("ctrl_tcp disconnected: %r", e)
         finally:
             self.connected = False
             for fut in self._pending.values():
                 if not fut.done():
                     fut.set_exception(ConnectionError("getrennt"))
-            if self.in_call:                     # Gespräch ist mit baresip weg
+            if self.in_call:                     # the call is gone along with baresip
                 self._call_over("call_end")
             self._link_changed()
 
@@ -331,10 +331,10 @@ class BaresipBackend(TelephonyBackend):
             self.registered = False
             self._link_changed()
         elif t == "CALL_INCOMING":
-            if self.in_call:                      # Anklopfen: zweiten Anruf abweisen
+            if self.in_call:                      # call waiting: reject the second call
                 return
             self.in_call = True
-            # Omafon klingelt selbst. Nicht hier warten: diese Schleife liest die Antwort.
+            # Omafon rings itself. Don't wait here: this loop reads the answer.
             self._fire("stopringing")
             self._emit("ring")
             self._emit("clip", peer_number(ev.get("peeruri", "")))
@@ -346,7 +346,7 @@ class BaresipBackend(TelephonyBackend):
             self._call_over(close_kind(ev.get("param", "")))
 
     def _fire(self, command: str, params: str = "") -> None:
-        """Befehl ohne auf die Antwort zu warten (aus der Leseschleife heraus)."""
+        """Command without waiting for the answer (from within the read loop)."""
         async def run():
             try:
                 await self._send(command, params)
@@ -371,7 +371,7 @@ class BaresipBackend(TelephonyBackend):
             self._ring_task.cancel()
         self._ring_task = None
 
-    # ------------------------------------------------------------ Verbindung
+    # ------------------------------------------------------------ Connection
     def _link_changed(self) -> None:
         if self.online:
             self.offline_since = None
@@ -388,15 +388,15 @@ class BaresipBackend(TelephonyBackend):
             try:
                 await self.check_link()
             except Exception:
-                log.exception("Fehler in der Verbindungsüberwachung")
+                log.exception("Error in connection monitoring")
 
     async def check_link(self) -> None:
-        """Einmal prüfen und ggf. eskalieren (öffentlich für Tests)."""
+        """Check once and escalate if needed (public for tests)."""
         up = self._read_wifi_up()
         if up != self.wifi_up:
-            log.warning("WLAN %s", "wieder da" if up else "weg")
+            log.warning("Wi-Fi %s", "wieder da" if up else "weg")
             self.wifi_up = up
-            if self.in_call and not up:           # Gespräch ist ohne WLAN verloren
+            if self.in_call and not up:           # the call is lost without Wi-Fi
                 try:
                     await self._send("hangup", timeout=2)
                 except ModemError:
@@ -412,7 +412,7 @@ class BaresipBackend(TelephonyBackend):
             self.link_announced_down = True
             self._emit("link_lost")
         if self.spawn and self.proc is not None and self.proc.returncode is not None:
-            log.warning("baresip beendet (%s) – starte neu", self.proc.returncode)
+            log.warning("baresip exited (%s) – restarting", self.proc.returncode)
             await self._spawn()
         if not self.connected:
             await self._connect(attempts=1)
@@ -426,20 +426,20 @@ class BaresipBackend(TelephonyBackend):
                 break
 
     async def _escalate(self, step: str) -> None:
-        log.warning("Fritz!Box nicht erreichbar – Schritt %s", step)
+        log.warning("Fritz!Box unreachable – step %s", step)
         if step == "reregister":
             try:
                 await self._send("uareg", str(int(self.sip["regint"])))
             except ModemError:
                 pass
         elif step == "restart" and self.spawn and self.proc:
-            self.proc.terminate()                 # Überwachung startet neu
+            self.proc.terminate()                 # monitoring restarts
         elif step == "wifi" and self.sip["wifi_reset_cmd"]:
             p = await asyncio.create_subprocess_shell(
                 self.sip["wifi_reset_cmd"], stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL)
             await p.wait()
-        if step == "wifi":                        # danach von vorn eskalieren
+        if step == "wifi":                        # then escalate from the start
             self._escalated.clear()
             self.offline_since = self.clock() - float(self.sip["link_grace_s"])
 
@@ -453,7 +453,7 @@ class BaresipBackend(TelephonyBackend):
             pass
         return None
 
-    # ------------------------------------------------------------ Telefonie
+    # ------------------------------------------------------------ Telephony
     def _uri(self, number: str) -> str:
         number = number.strip().replace(" ", "")
         return f"sip:{number}@{self.sip['registrar']}"
@@ -487,12 +487,12 @@ class BaresipBackend(TelephonyBackend):
         return 31 if dbm is None else dbm_to_csq(dbm)
 
     async def alive(self) -> bool:
-        """True, solange die eigene Überwachung läuft – sie baut die Verbindung
-        selbst wieder auf (Phone soll kein Mobilfunkmodul neu starten)."""
+        """True while our own monitoring runs – it restores the connection
+        itself (Phone should not restart a mobile module)."""
         sup = next((t for t in self._tasks if t.get_name() == "sip-supervisor"), None)
         return sup is not None and not sup.done()
 
-    # ------------------------------------------------------------ Nachrichten
+    # ------------------------------------------------------------ Messages
     def can_send_to(self, number: str) -> bool:
         return self.notifier.can_reach(number)
 
@@ -521,18 +521,18 @@ class BaresipBackend(TelephonyBackend):
                     await self.refresh_phonebook()
                     last_book = self.clock()
                 await self.poll_tam()
-            except Exception as e:      # Fritz!Box weg, falsches Passwort …
-                log.warning("Fritz!Box-Abfrage fehlgeschlagen: %r", e)
+            except Exception as e:      # Fritz!Box gone, wrong password …
+                log.warning("Fritz!Box query failed: %r", e)
             await asyncio.sleep(float(self.fritz_opts["tam_poll_s"]))
 
     async def refresh_phonebook(self) -> int:
         book = await asyncio.get_running_loop().run_in_executor(None, self.fritz.phonebook)
         self.cfg.phonebook = book
-        log.info("Telefonbuch: %d Nummern", len(book))
+        log.info("Phone book: %d numbers", len(book))
         return len(book)
 
     async def poll_tam(self) -> int:
-        """Neue AB-Nachrichten holen; je Nachricht ein 'sms'-Ereignis. Rückgabe: Anzahl."""
+        """Fetch new answering machine messages; one 'sms' event per message. Returns: count."""
         async with self._tam_lock:
             return await self._poll_tam()
 
@@ -540,13 +540,13 @@ class BaresipBackend(TelephonyBackend):
         loop = asyncio.get_running_loop()
         msgs, list_url = await loop.run_in_executor(None, self.fritz.tam_messages)
         found = 0
-        for m in reversed(msgs):                       # älteste zuerst
+        for m in reversed(msgs):                       # oldest first
             key = (m.tam, m.index, m.time)
             if not m.new or key in self._seen:
                 continue
             raw = await loop.run_in_executor(None, self.fritz.download, list_url, m)
             audio = await self._store_audio(raw, f"ab_{m.tam}_{m.index}_{int(time.time())}")
-            self._next_idx += 1                       # Ansagetext setzt Phone (P-Dict)
+            self._next_idx += 1                       # Phone sets the announcement text (P dict)
             self.store[self._next_idx] = VoiceMessage(
                 sender=m.number, text="", timestamp=m.time, audio=audio)
             self._seen.add(key)
@@ -565,7 +565,7 @@ class BaresipBackend(TelephonyBackend):
         if raw[:4] == b"RIFF":
             wav.write_bytes(raw)
             return str(wav)
-        # Unbekanntes Format: ffmpeg erkennt es meist selbst (siehe offene Fragen)
+        # unknown format: ffmpeg usually detects it itself (see open questions)
         src = d / f"{stem}.raw"
         src.write_bytes(raw)
         if shutil.which("ffmpeg"):
@@ -575,6 +575,6 @@ class BaresipBackend(TelephonyBackend):
             if await p.wait() == 0 and wav.exists():
                 src.unlink(missing_ok=True)
                 return str(wav)
-        log.error("AB-Aufnahme %s nicht abspielbar (Format unbekannt)", src.name)
+        log.error("Answering machine recording %s not playable (unknown format)", src.name)
         return ""
 

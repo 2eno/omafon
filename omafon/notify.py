@@ -1,13 +1,13 @@
-"""Benachrichtigungen ohne SMS: Telegram-Bot und/oder E-Mail.
+"""Notifications without SMS: Telegram bot and/or e-mail.
 
-Ersatz für Notruf-SMS und diktierte Nachrichten im Festnetz-Betrieb. Alles ist
-optional und standardmäßig aus. Empfänger sind die Kontakte aus config.yaml
-mit ``telegram_chat_id`` und/oder ``email``.
+Replacement for emergency SMS and dictated messages in landline mode. Everything
+is optional and off by default. Recipients are the contacts from config.yaml
+with ``telegram_chat_id`` and/or ``email``.
 
 config.yaml:
   notify:
     enabled: true
-    telegram_token: "123456:ABC…"       # Bot von @BotFather
+    telegram_token: "123456:ABC…"       # bot from @BotFather
     smtp_host: smtp.example.org         # optional
     smtp_port: 587
     smtp_user: omafon@example.org
@@ -46,8 +46,8 @@ class Notifier:
                                             or (self.smtp.get("host") and getattr(c, "email", None))))
 
     async def send_to_number(self, number: str, text: str) -> None:
-        """Schickt text an den Kontakt mit dieser Telefonnummer. Wirft ModemError,
-        wenn kein Weg zu ihm eingerichtet ist oder alle Wege scheitern."""
+        """Sends text to the contact with this phone number. Raises ModemError
+        if no path to them is set up or all paths fail."""
         if not self.enabled:
             raise ModemError("Benachrichtigungen sind ausgeschaltet")
         c = self.cfg.by_number(number)
@@ -59,7 +59,7 @@ class Notifier:
             try:
                 await loop.run_in_executor(None, self._telegram, c.telegram_chat_id, text)
                 sent = True
-            except Exception as e:  # Netz, Bot gesperrt …
+            except Exception as e:  # network, bot blocked …
                 errors.append(f"Telegram: {e}")
         if self.smtp.get("host") and getattr(c, "email", None):
             try:
@@ -70,7 +70,7 @@ class Notifier:
         if not sent:
             raise ModemError("; ".join(errors) or f"Kein Benachrichtigungsweg zu {c.name}")
         for e in errors:
-            log.warning("Teilweise fehlgeschlagen: %s", e)
+            log.warning("Partially failed: %s", e)
 
     def _telegram(self, chat_id, text: str) -> None:
         url = f"https://api.telegram.org/bot{self.token}/sendMessage"

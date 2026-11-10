@@ -1,13 +1,13 @@
-"""Tasten, Akku, Vibration, LED und Modem-Stromschalter.
+"""Keys, battery, vibration, LED and modem power switch.
 
-Alle Tasten werden in einem Thread mit 100 Hz abgefragt. Ein Tastenzustand
-zählt erst nach der Anschlagverzögerung (80 ms), damit zittrige Finger
-keine Doppelauslösung erzeugen. Daraus entstehen KeyEvents:
+All keys are polled in a thread at 100 Hz. A key state only counts after the
+debounce delay (80 ms) so that shaky fingers don't cause double triggers.
+This produces KeyEvents:
 
-  down  – Taste gilt als gedrückt (Ziffern werden hier schon angesagt)
-  short – losgelassen vor long_press_s
-  long  – gehalten bis long_press_s (danach kein short mehr)
-  up    – losgelassen (immer)
+  down  – key counts as pressed (digits are already announced here)
+  short – released before long_press_s
+  long  – held until long_press_s (no short afterwards)
+  up    – released (always)
 """
 from __future__ import annotations
 
@@ -19,17 +19,17 @@ from dataclasses import dataclass
 
 log = logging.getLogger("omafon.hw")
 
-# MCP23017: Bit -> Taste (GPA0..7 = Bits 0..7, GPB0..7 = Bits 8..15)
+# MCP23017: bit -> key (GPA0..7 = bits 0..7, GPB0..7 = bits 8..15)
 MCP_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8",
             "9", "*", "0", "#", "CALL", "HANGUP", "MSG", "INFO"]
 
-# Direkt am Pi (BCM-Nummer, Taste, invertiert)
+# directly on the Pi (BCM number, key, inverted)
 PI_INPUTS = [
     (22, "SOS", False),
-    (23, "SOS_COVER", True),     # Mikroschalter: geschlossen = Klappe zu -> invertieren
+    (23, "SOS_COVER", True),     # microswitch: closed = cover shut -> invert
     (24, "VOL_UP", False),
     (25, "VOL_DOWN", False),
-    (27, "CHARGER", False),      # bq24074 PGOOD: low = Ladeschale/Netzteil
+    (27, "CHARGER", False),      # bq24074 PGOOD: low = cradle/power supply
 ]
 PIN_VIBRA, PIN_LED, PIN_MODEM_PWR = 12, 13, 6
 
@@ -41,11 +41,11 @@ DEFAULT_DEBOUNCE_S = 0.08
 class KeyEvent:
     key: str
     kind: str   # down, short, long, up
-    held: float = 0.0   # bei short/up: wie lange die Taste gedrückt war (s)
+    held: float = 0.0   # for short/up: how long the key was pressed (s)
 
 
 class KeyTracker:
-    """Wandelt rohe Zustände (gedrückt ja/nein) in KeyEvents um."""
+    """Turns raw states (pressed yes/no) into KeyEvents."""
 
     def __init__(self, post, long_s: float, long_overrides: dict[str, float] | None = None):
         self.post = post
@@ -86,7 +86,7 @@ class Hardware:
         from smbus2 import SMBus
         self.bus = SMBus(1)
         self.loop, self.events = loop, events
-        # MCP23017 (0x20): alle Pins Eingang mit Pull-up
+        # MCP23017 (0x20): all pins input with pull-up
         for reg in (0x00, 0x01, 0x0C, 0x0D):
             self.bus.write_byte_data(0x20, reg, 0xFF)
         self.inputs = [(Button(pin, pull_up=True, bounce_time=None), key, inv)
@@ -98,7 +98,7 @@ class Hardware:
         threading.Thread(target=self._poll, daemon=True, name="keys").start()
 
     def _post(self, ev: KeyEvent) -> None:
-        log.debug("Taste %s %s", ev.key, ev.kind)
+        log.debug("Key %s %s", ev.key, ev.kind)
         self.loop.call_soon_threadsafe(self.events.put_nowait, ev)
 
     def _poll(self) -> None:
@@ -115,12 +115,12 @@ class Hardware:
             except OSError:
                 errors += 1
                 if errors == 50:
-                    log.error("MCP23017 antwortet nicht – Ziffernblock ausgefallen")
-            for btn, key, inv in self.inputs:  # SOS bleibt auch ohne I²C funktionsfähig
+                    log.error("MCP23017 not responding – keypad failed")
+            for btn, key, inv in self.inputs:  # SOS keeps working even without I²C
                 self.tracker.update(key, btn.is_pressed != inv, now)
             time.sleep(0.01)
 
-    # ------------------------------------------------------------ Ausgänge
+    # ------------------------------------------------------------ Outputs
     def vibrate(self, on: bool) -> None:
         self.vibra.value = 0.8 if on else 0
 
@@ -128,7 +128,7 @@ class Hardware:
         self.led.value = on
 
     def battery_percent(self) -> int | None:
-        """MAX17048 (0x36), Register 0x04 = SOC, High-Byte in Prozent."""
+        """MAX17048 (0x36), register 0x04 = SOC, high byte in percent."""
         try:
             hi, lo = self.bus.read_i2c_block_data(0x36, 0x04, 2)
             return max(0, min(100, round(hi + lo / 256)))
@@ -139,7 +139,7 @@ class Hardware:
         return bool(self.tracker.state.get("CHARGER"))
 
     async def modem_power_cycle(self) -> None:
-        """Waveshare-HAT: PWRKEY-Puls schaltet um. Aus, warten, wieder ein."""
+        """Waveshare HAT: a PWRKEY pulse toggles. Off, wait, on again."""
         for _ in range(2):
             self.modem_pwr.on()
             await asyncio.sleep(1.5)
@@ -164,7 +164,7 @@ class SimHardware:
     def flash(self, on):
         if on != self.led:
             self.led = on
-            self.log.append(f"LED {'an' if on else 'aus'}")   # nicht ausgeben: blinkt oft
+            self.log.append(f"LED {'an' if on else 'aus'}")   # don't log: blinks often
     def battery_percent(self): return self.battery
     def on_charger(self): return self.charging
     async def modem_power_cycle(self): self._say("Modem neu gestartet")
